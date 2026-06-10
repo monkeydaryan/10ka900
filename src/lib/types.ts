@@ -2,7 +2,7 @@ export type MarketId = "twii" | "kospi" | "hsi" | "sensex" | "dax" | "dow";
 export type MarketState = "open" | "locked" | "settled";
 export type BetMode = "double" | "split";
 export type SplitSide = "Andar" | "Bahar";
-export type BetStatus = "pending" | "won" | "lost";
+export type BetStatus = "pending" | "won" | "lost" | "refunded";
 export type RequestStatus = "pending" | "approved" | "rejected";
 export type TicketStatus = "open" | "resolved";
 

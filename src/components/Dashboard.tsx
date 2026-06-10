@@ -228,8 +228,8 @@ function MarketPanel({
               </p>
             </div>
             <StatusBadge
-              label={bettingOpen ? "betting open" : "betting closed"}
-              classes={getMarketStatusClasses(bettingOpen ? "open" : "locked")}
+              label={market.status === "open" ? "betting open" : market.status === "locked" ? "locked by admin" : "settled"}
+              classes={getMarketStatusClasses(market.status)}
             />
           </div>
 
@@ -245,10 +245,12 @@ function MarketPanel({
               <p className="mt-1 font-mono text-2xl font-black text-amber-200">{market.cutoffLabel}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{bettingOpen ? "Time left to bet" : "Status"}</p>
-              <p className={`mt-1 font-mono text-2xl font-black ${bettingOpen ? "text-emerald-200" : "text-red-200"}`}>
-                {bettingOpen ? countdown : "CLOSED"}
-              </p>
+              <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+              {market.status === "locked" ? "Admin lock" : bettingOpen ? "Time left to bet" : "Status"}
+            </p>
+            <p className={`mt-1 font-mono text-2xl font-black ${market.status === "open" ? "text-emerald-200" : "text-red-200"}`}>
+              {market.status === "locked" ? "LOCKED" : bettingOpen ? countdown : "CLOSED"}
+            </p>
             </div>
           </div>
 
@@ -518,6 +520,8 @@ export function BetRow({ bet, showUser = false }: { bet: Bet; showUser?: boolean
       <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-200" />
     ) : bet.status === "lost" ? (
       <XCircle className="h-5 w-5 shrink-0 text-red-200" />
+    ) : bet.status === "refunded" ? (
+      <XCircle className="h-5 w-5 shrink-0 text-slate-400" />
     ) : (
       <TimerReset className="h-5 w-5 shrink-0 text-amber-200" />
     );

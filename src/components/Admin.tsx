@@ -56,6 +56,9 @@ export function AdminConsole({
   onRejectWithdraw: (id: string) => void;
   onResolveTicket: (id: string) => void;
   onSettleMarket: (marketId: MarketId, resultDecimal: string) => void;
+  onCloseMarket: (marketId: MarketId) => void;
+  onOpenMarket: (marketId: MarketId) => void;
+  onRejectBet: (betId: string) => void;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }) {
   const [tab, setTab] = useState<AdminTab>("overview");
@@ -109,11 +112,11 @@ export function AdminConsole({
 
         {tab === "overview" && <OverviewTab users={users} bets={bets} deposits={pendingDeposits} withdrawals={pendingWithdrawals} tickets={openTickets} events={events} />}
         {tab === "users" && <UsersTab users={users} events={events} />}
-        {tab === "bets" && <BetsTab bets={bets} />}
+        {tab === "bets" && <BetsTab bets={bets} onRejectBet={onRejectBet} />}
         {tab === "deposits" && <DepositsTab deposits={deposits} onApprove={onApproveDeposit} onReject={onRejectDeposit} />}
         {tab === "withdrawals" && <WithdrawalsTab withdrawals={withdrawals} onApprove={onApproveWithdraw} onReject={onRejectWithdraw} />}
         {tab === "support" && <SupportTab tickets={tickets} onResolve={onResolveTicket} />}
-        {tab === "settlement" && <SettlementTab markets={markets} onSettleMarket={onSettleMarket} />}
+        {tab === "settlement" && <SettlementTab markets={markets} onSettleMarket={onSettleMarket} onCloseMarket={onCloseMarket} onOpenMarket={onOpenMarket} />}
         {tab === "security" && <SecurityTab onChangePassword={onChangePassword} />}
       </div>
     </main>
@@ -270,22 +273,93 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
   );
 }
 
-function BetsTab({ bets }: { bets: Bet[] }) {
+function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: string) => void }) {
+  const pendingBets = bets.filter((bet) => bet.status === "pending");
+  const exposure = Array.from(
+    pendingBets.reduce((map, bet) => {
+      const key = `${bet.marketName}|${bet.mode}|${bet.selection}`;
+      const current = map.get(key);
+      if (current) {
+        current.totalStake += bet.stake;
+        current.count += 1;
+      } else {
+        map.set(key, { key, marketName: bet.marketName, mode: bet.mode, selection: bet.selection, totalStake: bet.stake, count: 1 });
+      }
+      return map;
+    }, new Map<string, { key: string; marketName: string; mode: BetMode; selection: string; totalStake: number; count: number }>()),
+  ).sort((a, b) => b.totalStake - a.totalStake);
+
   return (
-    <SectionCard>
-      <div className="flex items-center gap-3">
-        <ListChecks className="h-5 w-5 text-violet-200" />
-        <h2 className="text-xl font-bold">Every bet, live</h2>
-        <LiveDot />
-      </div>
-      <div className="mt-4 space-y-3">
-        {bets.length === 0 ? (
-          <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No bets placed yet.</p>
+    <div className="space-y-5">
+      <SectionCard>
+        <div className="flex items-center gap-3">
+          <ListChecks className="h-5 w-5 text-violet-200" />
+          <h2 className="text-xl font-bold">Every bet, live</h2>
+          <LiveDot />
+        </div>
+        <p className="mt-2 text-sm text-slate-400">Review exposure by number and reject pending bets manually to refund stakes instantly.</p>
+      </SectionCard>
+
+      <SectionCard>
+        <h3 className="text-xl font-bold">Exposure by selection</h3>
+        {exposure.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No pending bets to expose yet.</p>
         ) : (
-          bets.map((bet) => <BetRow key={bet.id} bet={bet} showUser />)
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
+                  <th className="py-3 pr-4">Market</th>
+                  <th className="py-3 pr-4">Type</th>
+                  <th className="py-3 pr-4">Selection</th>
+                  <th className="py-3 pr-4">Total stake</th>
+                  <th className="py-3">Bets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {exposure.map((item) => (
+                  <tr key={item.key} className="border-b border-white/5">
+                    <td className="py-3 pr-4 text-slate-300">{item.marketName}</td>
+                    <td className="py-3 pr-4 text-slate-300">{item.mode === "double" ? "Double" : "Split"}</td>
+                    <td className="py-3 pr-4 text-white font-semibold">{item.selection}</td>
+                    <td className="py-3 pr-4 font-mono text-cyan-100">{formatCredits(item.totalStake)}</td>
+                    <td className="py-3 text-slate-400">{item.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-    </SectionCard>
+      </SectionCard>
+
+      <SectionCard>
+        <h3 className="text-xl font-bold">Pending bets</h3>
+        <div className="mt-4 space-y-3">
+          {bets.length === 0 ? (
+            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No bets placed yet.</p>
+          ) : (
+            bets.map((bet) => (
+              <div key={bet.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div>
+                  <p className="font-bold text-white">{bet.marketName} · {bet.mode === "double" ? "Double" : bet.splitSide} {bet.selection}</p>
+                  <p className="mt-1 text-sm text-slate-400">{bet.userName} · {bet.userId} · stake {formatCredits(bet.stake)}</p>
+                  <p className="mt-1 text-sm text-slate-300 uppercase tracking-[0.18em]">Status: {bet.status === "refunded" ? "Refunded" : bet.status}</p>
+                </div>
+                <div className="flex flex-col gap-2 sm:items-end">
+                  {bet.status === "pending" ? (
+                    <button onClick={() => onRejectBet(bet.id)} className="rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-400">
+                      Reject bet & refund
+                    </button>
+                  ) : (
+                    <span className="rounded-full bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">{bet.status}</span>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </SectionCard>
+    </div>
   );
 }
 
@@ -395,9 +469,11 @@ function SupportTab({ tickets, onResolve }: { tickets: SupportTicket[]; onResolv
   );
 }
 
-function SettlementTab({ markets, onSettleMarket }: { markets: Market[]; onSettleMarket: (marketId: MarketId, resultDecimal: string) => void }) {
+function SettlementTab({ markets, onSettleMarket, onCloseMarket, onOpenMarket }: { markets: Market[]; onSettleMarket: (marketId: MarketId, resultDecimal: string) => void; onCloseMarket: (marketId: MarketId) => void; onOpenMarket: (marketId: MarketId) => void }) {
   const [selectedMarket, setSelectedMarket] = useState<MarketId>("hsi");
   const [resultDigits, setResultDigits] = useState("31");
+
+  const activeMarket = markets.find((market) => market.id === selectedMarket);
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
@@ -424,9 +500,18 @@ function SettlementTab({ markets, onSettleMarket }: { markets: Market[]; onSettl
               className={`${inputClasses} font-mono text-3xl font-black text-cyan-100 focus:border-violet-300/60`}
             />
           </label>
-          <button onClick={() => onSettleMarket(selectedMarket, resultDigits || "00")} className="w-full rounded-2xl bg-violet-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white">
-            Settle bets now
-          </button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button onClick={() => onSettleMarket(selectedMarket, resultDigits || "00")} className="w-full rounded-2xl bg-violet-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white">
+              Settle bets now
+            </button>
+            <button
+              onClick={() => (activeMarket?.status === "open" ? onCloseMarket(selectedMarket) : onOpenMarket(selectedMarket))}
+              className={`w-full rounded-2xl px-5 py-4 text-sm font-black uppercase tracking-[0.2em] transition ${activeMarket?.status === "open" ? "bg-red-500 text-white hover:bg-red-400" : "bg-emerald-400 text-slate-950 hover:bg-emerald-300"}`}
+            >
+              {activeMarket?.status === "open" ? "Close market" : "Open market"}
+            </button>
+          </div>
+          <p className="mt-3 text-sm text-slate-400">Manual close locks betting immediately; pending stakes are refunded to users.</p>
         </div>
       </SectionCard>
 
@@ -437,6 +522,7 @@ function SettlementTab({ markets, onSettleMarket }: { markets: Market[]; onSettl
         <ChecklistItem>Betting cutoffs: Taiwan 10:53 AM · KOSPI 11:53 AM · Hang Seng 1:32 PM · SENSEX 3:23 PM · DAX 8:55 PM · Dow Jones 12:00 AM.</ChecklistItem>
         <ChecklistItem>Duplicate transaction IDs cannot be submitted twice.</ChecklistItem>
         <ChecklistItem>Withdrawal amounts are held immediately to prevent double spending; rejects refund instantly.</ChecklistItem>
+        <ChecklistItem>Manual market lock refunds all pending bets to user demo wallets.</ChecklistItem>
         <ChecklistItem>Registrations and logins are OTP verified and reported to platform operations.</ChecklistItem>
         <ChecklistItem>Admin session is fully isolated from the player application.</ChecklistItem>
       </SectionCard>

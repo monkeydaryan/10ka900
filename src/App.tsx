@@ -470,6 +470,76 @@ export default function App() {
   /* ------------------------------------------------------------ */
   /* Settlement                                                     */
   /* ------------------------------------------------------------ */
+  const refundPendingBetsForMarket = (marketId: MarketId, reason: string) => {
+    const refunds = new Map<string, number>();
+    const nextBets = bets.map((bet) => {
+      if (bet.marketId !== marketId || bet.status !== "pending") return bet;
+      refunds.set(bet.userId, (refunds.get(bet.userId) ?? 0) + bet.stake);
+      return { ...bet, status: "refunded" as BetStatus, payout: 0 };
+    });
+
+    if (refunds.size === 0) {
+      persistBets(nextBets);
+      return 0;
+    }
+
+    const nextUsers = users.map((user) => {
+      const refund = refunds.get(user.userId);
+      return refund ? { ...user, wallet: user.wallet + refund } : user;
+    });
+
+    persistBets(nextBets);
+    persistUsers(nextUsers);
+    if (currentUser) {
+      const updated = nextUsers.find((user) => user.userId === currentUser.userId);
+      if (updated) updateCurrentUser(updated);
+    }
+
+    const totalRefund = Array.from(refunds.values()).reduce((sum, amount) => sum + amount, 0);
+    const marketName = markets.find((m) => m.id === marketId)?.name ?? marketId;
+    logEvent("bet", `Market locked: ${marketName}`, `${formatCredits(totalRefund)} refunded to ${refunds.size} user(s) after ${reason}`);
+    return totalRefund;
+  };
+
+  const closeMarket = (marketId: MarketId) => {
+    const nextMarkets = markets.map((market) =>
+      market.id === marketId ? { ...market, status: "locked" as MarketState } : market,
+    );
+    persistMarkets(nextMarkets);
+    refundPendingBetsForMarket(marketId, "admin lock");
+    const marketName = markets.find((m) => m.id === marketId)?.name ?? marketId;
+    logEvent("bet", `Market locked manually: ${marketName}`, `Betting closed by admin and pending stakes refunded.`);
+  };
+
+  const openMarket = (marketId: MarketId) => {
+    const nextMarkets = markets.map((market) =>
+      market.id === marketId ? { ...market, status: "open" as MarketState } : market,
+    );
+    persistMarkets(nextMarkets);
+    const marketName = markets.find((m) => m.id === marketId)?.name ?? marketId;
+    logEvent("bet", `Market opened manually: ${marketName}`, `Betting reopened by admin.`);
+  };
+
+  const rejectBet = (betId: string) => {
+    const bet = bets.find((item) => item.id === betId && item.status === "pending");
+    if (!bet) return;
+
+    const nextBets = bets.map((item) =>
+      item.id === betId ? { ...item, status: "refunded" as BetStatus, payout: 0 } : item,
+    );
+    const nextUsers = users.map((user) =>
+      user.userId === bet.userId ? { ...user, wallet: user.wallet + bet.stake } : user,
+    );
+
+    persistBets(nextBets);
+    persistUsers(nextUsers);
+    if (currentUser?.userId === bet.userId) {
+      const updated = nextUsers.find((user) => user.userId === bet.userId);
+      if (updated) updateCurrentUser(updated);
+    }
+    logEvent("bet", `Bet rejected: ${bet.userName}`, `${bet.userId} stake ${formatCredits(bet.stake)} refunded for ${bet.selection}`);
+  };
+
   const settleMarket = (marketId: MarketId, resultDecimal: string) => {
     const normalized = resultDecimal.padStart(2, "0").slice(-2);
     const nextMarkets = markets.map((market) =>
@@ -547,6 +617,9 @@ export default function App() {
         onRejectWithdraw={rejectWithdraw}
         onResolveTicket={resolveTicket}
         onSettleMarket={settleMarket}
+        onCloseMarket={closeMarket}
+        onOpenMarket={openMarket}
+        onRejectBet={rejectBet}
         onChangePassword={changeAdminPassword}
       />
     );
