@@ -298,7 +298,9 @@ export default function App() {
   const placeBet = (market: Market, mode: BetMode, selection: string, stake: number, splitSide?: SplitSide): string | null => {
     if (!currentUser) return "You must be logged in.";
     if (!isBettingOpen(market, new Date()))
-      return `Betting on ${market.name} is closed — the cutoff is ${market.cutoffLabel} sharp.`;
+      return market.status === "locked"
+        ? `Betting on ${market.name} is currently locked by admin.`
+        : `Betting on ${market.name} is closed — the cutoff is ${market.cutoffLabel} sharp.`;
     if (!Number.isFinite(stake) || stake < 1) return "Stake must be at least 1 credit.";
     if (mode === "double" && stake > MAX_DOUBLE_BET)
       return `Maximum bet on a single double-digit number is ${MAX_DOUBLE_BET} credits.`;

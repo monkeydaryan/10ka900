@@ -407,7 +407,9 @@ function BettingWidget({
         className="mt-4 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.22em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
       >
         {!bettingOpen
-          ? `Betting closed — cutoff ${market.cutoffLabel}`
+          ? market.status === "locked"
+            ? "Betting locked by admin"
+            : `Betting closed — cutoff ${market.cutoffLabel}`
           : overMax
             ? `Max ${MAX_DOUBLE_BET} on double digit`
             : wallet < stake
@@ -417,7 +419,9 @@ function BettingWidget({
       <p className="mt-3 text-center text-xs text-slate-500">
         {bettingOpen
           ? `Unlimited bets per day. Betting stops at ${market.cutoffLabel} sharp — ${countdown} left.`
-          : `Betting reopens after settlement. Today's cutoff was ${market.cutoffLabel}.`}
+          : market.status === "locked"
+            ? "This market is locked by the admin. Any pending bets were refunded on closure."
+            : `Betting reopens after settlement. Today's cutoff was ${market.cutoffLabel}.`}
       </p>
     </section>
   );

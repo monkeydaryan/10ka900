@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Banknote, Headset, KeyRound, Landmark, ListChecks, Radio, Users } from "lucide-react";
 import {
@@ -275,19 +275,25 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
 
 function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: string) => void }) {
   const pendingBets = bets.filter((bet) => bet.status === "pending");
-  const exposure = Array.from(
-    pendingBets.reduce((map, bet) => {
-      const key = `${bet.marketName}|${bet.mode}|${bet.selection}`;
-      const current = map.get(key);
-      if (current) {
-        current.totalStake += bet.stake;
-        current.count += 1;
-      } else {
-        map.set(key, { key, marketName: bet.marketName, mode: bet.mode, selection: bet.selection, totalStake: bet.stake, count: 1 });
-      }
-      return map;
-    }, new Map<string, { key: string; marketName: string; mode: BetMode; selection: string; totalStake: number; count: number }>()),
-  ).sort((a, b) => b.totalStake - a.totalStake);
+  const exposure = useMemo(
+    () =>
+      Array.from(
+        pendingBets.reduce((map, bet) => {
+          const key = `${bet.marketName}|${bet.mode}|${bet.selection}`;
+          const current = map.get(key);
+          if (current) {
+            current.totalStake += bet.stake;
+            current.count += 1;
+          } else {
+            map.set(key, { key, marketName: bet.marketName, mode: bet.mode, selection: bet.selection, totalStake: bet.stake, count: 1 });
+          }
+          return map;
+        }, new Map<string, { key: string; marketName: string; mode: BetMode; selection: string; totalStake: number; count: number }>()),
+      ).sort((a, b) => b.totalStake - a.totalStake),
+    [pendingBets],
+  );
+  const totalPendingStake = pendingBets.reduce((sum, bet) => sum + bet.stake, 0);
+  const topExposure = exposure[0];
 
   return (
     <div className="space-y-5">
@@ -300,8 +306,22 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
         <p className="mt-2 text-sm text-slate-400">Review exposure by number and reject pending bets manually to refund stakes instantly.</p>
       </SectionCard>
 
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SectionCard className="p-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pending exposure</p>
+          <p className="mt-3 font-mono text-3xl font-black text-white">{formatCredits(totalPendingStake)}</p>
+          <p className="mt-2 text-sm text-slate-400">Total amount currently at risk across all pending bets.</p>
+        </SectionCard>
+        <SectionCard className="p-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top risk selection</p>
+          <p className="mt-3 font-mono text-3xl font-black text-white">{topExposure ? `${topExposure.selection} · ${formatCredits(topExposure.totalStake)}` : "None yet"}</p>
+          <p className="mt-2 text-sm text-slate-400">Highest-stake pending selection across all markets.</p>
+        </SectionCard>
+      </div>
+
       <SectionCard>
         <h3 className="text-xl font-bold">Exposure by selection</h3>
+        <p className="mt-2 text-sm text-slate-400">This table totals all pending stakes on a single number or double, grouped by market.</p>
         {exposure.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No pending bets to expose yet.</p>
         ) : (
@@ -511,7 +531,7 @@ function SettlementTab({ markets, onSettleMarket, onCloseMarket, onOpenMarket }:
               {activeMarket?.status === "open" ? "Close market" : "Open market"}
             </button>
           </div>
-          <p className="mt-3 text-sm text-slate-400">Manual close locks betting immediately; pending stakes are refunded to users.</p>
+          <p className="mt-3 text-sm text-slate-400">Manual close locks betting immediately; pending stakes are refunded to users. Reopen the market to allow new bets again.</p>
         </div>
       </SectionCard>
 
