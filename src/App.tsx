@@ -166,13 +166,13 @@ export default function App() {
     writeGuard(guard);
   };
 
-  const handleRegistered = async (name: string, email: string, phone: string, password: string) => {
+  const handleRegistered = async (name: string, phone: string, password: string) => {
     const salt = createSalt();
     const passwordHash = await hashPassword(password, salt);
     const profile: UserProfile = {
       userId: createUserId(),
       name,
-      email,
+      email: "",
       phone,
       wallet: 2500,
       realWallet: 0,
@@ -182,35 +182,35 @@ export default function App() {
     };
     persistUsers([...users, profile]);
     updateCurrentUser(profile);
-    logEvent("registration", `New registration: ${name}`, `${profile.userId} · ${email}${phone ? ` · ${phone}` : ""} — forwarded to ${OWNER_EMAIL}`);
+    logEvent("registration", `New registration: ${name}`, `${profile.userId} · ${phone} — forwarded to ${OWNER_EMAIL}`);
     notifyOwner(
       `${BRAND}: new registration ${profile.userId}`,
-      `Name: ${name}\nEmail: ${email}\nPhone: ${phone || "-"}\nUser ID: ${profile.userId}\nRegistered: ${profile.createdAt}`,
+      `Name: ${name}\nPhone: ${phone}\nUser ID: ${profile.userId}\nRegistered: ${profile.createdAt}`,
     );
     void fetch(`${API_BASE}/register.php`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, display_name: name, phone, password }),
+      body: JSON.stringify({ phone, display_name: name, password }),
     }).catch(() => undefined);
     setActiveTab("hsi");
     setScreen("dashboard");
   };
 
-  const handleUserLogin = async (email: string, password: string): Promise<string | null> => {
-    if (!email || !password) return "Email and password are required.";
-    const lockMessage = checkLockout(`user:${email}`);
+  const handleUserLogin = async (phone: string, password: string): Promise<string | null> => {
+    if (!phone || !password) return "Phone number and password are required.";
+    const lockMessage = checkLockout(`user:${phone}`);
     if (lockMessage) return lockMessage;
 
-    const profile = users.find((user) => user.email === email);
-    if (!profile) return recordFailure(`user:${email}`);
+    const profile = users.find((user) => user.phone === phone);
+    if (!profile) return recordFailure(`user:${phone}`);
 
     const attempt = await hashPassword(password, profile.salt);
-    if (attempt !== profile.passwordHash) return recordFailure(`user:${email}`);
+    if (attempt !== profile.passwordHash) return recordFailure(`user:${phone}`);
 
-    clearFailures(`user:${email}`);
+    clearFailures(`user:${phone}`);
     updateCurrentUser(profile);
-    logEvent("login", `Login: ${profile.name}`, `${profile.userId} · ${email} — reported to ${OWNER_EMAIL}`);
-    notifyOwner(`${BRAND}: login ${profile.userId}`, `User ${profile.name} (${email}) logged in at ${new Date().toISOString()}`);
+    logEvent("login", `Login: ${profile.name}`, `${profile.userId} · ${phone} — reported to ${OWNER_EMAIL}`);
+    notifyOwner(`${BRAND}: login ${profile.userId}`, `User ${profile.name} (${phone}) logged in at ${new Date().toISOString()}`);
     setActiveTab("hsi");
     setScreen("dashboard");
     return null;
@@ -512,7 +512,6 @@ export default function App() {
       <RegisterScreen
         onBack={() => setScreen("landing")}
         onRegistered={handleRegistered}
-        emailExists={(email) => users.some((user) => user.email === email)}
       />
     );
   }

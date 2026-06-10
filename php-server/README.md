@@ -24,12 +24,9 @@ GET  http://localhost:8080/market-close-job.php?symbol=%5EHSI
 
 ## Default Admin
 
-```text
-username: admin
-password: ChangeMe123!
-```
+The local PHP server seeds an initial admin account on first run. For local development, the seeded admin username is `admin` and the password is configured in `php-server/config.php`.
 
-Change the default password before using this beyond local development.
+Change the seeded admin password before using this beyond local development.
 
 ## Storage
 

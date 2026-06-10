@@ -199,7 +199,7 @@ function OtpVerifier({
         <span className="font-bold uppercase tracking-[0.18em]">Demo mode:</span> your OTP is{" "}
         <span className="font-mono text-lg font-black tracking-[0.3em] text-white">{expected}</span>
         <br />
-        In production this is delivered by PHPMailer + Gmail SMTP (free) or Firebase Phone Auth (free tier) and never shown here.
+        In production this is delivered by Firebase Phone Auth or SMS gateway services and never shown here.
       </div>
       <Field label="Enter the 6-digit OTP">
         <input
@@ -248,18 +248,14 @@ function OtpVerifier({
 export function RegisterScreen({
   onBack,
   onRegistered,
-  emailExists,
 }: {
   onBack: () => void;
-  onRegistered: (name: string, email: string, phone: string, password: string) => void;
-  emailExists: (email: string) => boolean;
+  onRegistered: (name: string, phone: string, password: string) => void;
 }) {
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [channel, setChannel] = useState<"email" | "sms">("email");
   const [step, setStep] = useState<"form" | "otp">("form");
   const [error, setError] = useState("");
 
@@ -269,7 +265,7 @@ export function RegisterScreen({
     <AuthShell
       title="Create account"
       headline="Register securely."
-      subtitle="Set a strong password and verify your Gmail or phone with a system-generated OTP. Every registration is reported to the platform owner."
+      subtitle="Use your phone number only and verify it with a system-generated OTP. Every registration is reported to the platform owner."
       onBack={onBack}
     >
       <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
@@ -286,12 +282,9 @@ export function RegisterScreen({
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                const cleanEmail = email.trim().toLowerCase();
                 const cleanPhone = phone.replace(/[^\d+]/g, "");
                 if (!name.trim()) return setError("Please enter your name.");
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) return setError("Please enter a valid email address.");
-                if (emailExists(cleanEmail)) return setError("This email is already registered. Use Player login instead.");
-                if (channel === "sms" && cleanPhone.length < 10) return setError("Please enter a valid phone number for SMS OTP.");
+                if (cleanPhone.length < 10) return setError("Please enter a valid phone number.");
                 if (issues.length > 0) return setError("Your password does not meet the security requirements yet.");
                 if (password !== confirm) return setError("Passwords do not match.");
                 setError("");
@@ -301,9 +294,6 @@ export function RegisterScreen({
               <div className="space-y-5">
                 <Field label="Full name">
                   <input value={name} onChange={(e) => setName(e.target.value)} className={inputClasses} placeholder="Your name" autoComplete="name" />
-                </Field>
-                <Field label="Gmail / email address">
-                  <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputClasses} placeholder="you@gmail.com" autoComplete="email" />
                 </Field>
                 <Field label="Phone number">
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClasses} placeholder="+91 98765 43210" autoComplete="tel" />
@@ -326,17 +316,6 @@ export function RegisterScreen({
                 <Field label="Confirm password">
                   <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${inputClasses} ${confirm && confirm !== password ? "border-red-400/60" : ""}`} placeholder="Repeat the password" autoComplete="new-password" />
                 </Field>
-                <div>
-                  <span className="mb-2 block text-sm font-medium text-slate-300">Send OTP via</span>
-                  <div className="flex rounded-full border border-white/10 bg-slate-950/50 p-1">
-                    <button type="button" onClick={() => setChannel("email")} className={`flex-1 rounded-full px-4 py-2 text-sm font-bold ${channel === "email" ? "bg-cyan-300 text-slate-950" : "text-slate-300"}`}>
-                      Gmail OTP
-                    </button>
-                    <button type="button" onClick={() => setChannel("sms")} className={`flex-1 rounded-full px-4 py-2 text-sm font-bold ${channel === "sms" ? "bg-cyan-300 text-slate-950" : "text-slate-300"}`}>
-                      Phone OTP
-                    </button>
-                  </div>
-                </div>
               </div>
               {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
               <button className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white">
@@ -345,10 +324,10 @@ export function RegisterScreen({
             </form>
           ) : (
             <OtpVerifier
-              destination={channel === "email" ? email.trim().toLowerCase() : phone}
-              channel={channel}
-              onVerified={() => onRegistered(name.trim(), email.trim().toLowerCase(), phone.replace(/[^\d+]/g, ""), password)}
-              onResendNote={`On success, your registration details are forwarded to the platform owner at ${OWNER_EMAIL} and a locked ${BRAND} User ID is generated.`}
+              destination={phone}
+              channel="sms"
+              onVerified={() => onRegistered(name.trim(), phone.replace(/[^\d+]/g, ""), password)}
+              onResendNote={`On success, your registration details are forwarded to the platform operations team and a locked ${BRAND} User ID is generated.`}
             />
           )}
         </div>
@@ -358,14 +337,13 @@ export function RegisterScreen({
             <ShieldCheck className="mb-5 h-9 w-9 text-cyan-200" />
             <h3 className="text-3xl font-black tracking-[-0.05em] text-white">One identity. Fully audited.</h3>
             <p className="mt-4 leading-7 text-slate-300">
-              Every new registration is OTP verified and reported live to <span className="font-bold text-cyan-100">{OWNER_EMAIL}</span>.
-              Your unique User ID locks together your virtual wallet, real-credit wallet, bets, deposits, and withdrawals.
+              Every new registration is OTP verified and reported live to the platform operations team.
+              Your unique User ID locks together your virtual wallet, demo wallet, bets, deposits, and withdrawals.
             </p>
           </div>
           <ul className="mt-8 space-y-3 text-sm leading-6 text-slate-300">
-            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Free email OTP: PHPMailer + Gmail SMTP app password.</li>
             <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Free phone OTP: Firebase Phone Auth free tier.</li>
-            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Welcome bonus: 2,500 virtual play credits.</li>
+            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Welcome bonus: 2,500 virtual demo credits.</li>
           </ul>
         </div>
       </div>
@@ -384,10 +362,10 @@ export function LoginScreen({
 }: {
   onBack: () => void;
   onRegisterInstead: () => void;
-  /** Verifies email + password. Returns an error message, or null on success. */
-  onLogin: (email: string, password: string) => Promise<string | null>;
+  /** Verifies phone + password. Returns an error message, or null on success. */
+  onLogin: (phone: string, password: string) => Promise<string | null>;
 }) {
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -396,7 +374,7 @@ export function LoginScreen({
     <AuthShell
       title="Player login"
       headline="Welcome back."
-      subtitle="Sign in with your email and password. Five failed attempts lock the account for five minutes to block brute-force attacks."
+      subtitle="Sign in with your phone number and password. Five failed attempts lock the account for five minutes to block brute-force attacks."
       onBack={onBack}
     >
       <div className="mx-auto max-w-xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
@@ -413,14 +391,14 @@ export function LoginScreen({
             event.preventDefault();
             if (busy) return;
             setBusy(true);
-            const result = await onLogin(email.trim().toLowerCase(), password);
+            const result = await onLogin(phone.trim(), password);
             setBusy(false);
             if (result) setError(result);
           }}
         >
           <div className="space-y-5">
-            <Field label="Registered email">
-              <input value={email} onChange={(e) => setEmail(e.target.value)} className={inputClasses} placeholder="you@gmail.com" autoComplete="email" />
+            <Field label="Registered phone number">
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClasses} placeholder="+91 98765 43210" autoComplete="tel" />
             </Field>
             <Field label="Password">
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClasses} placeholder="Your password" autoComplete="current-password" />
@@ -450,8 +428,8 @@ export function AdminLogin({
   onBack: () => void;
   onLogin: (adminId: string, password: string) => Promise<boolean>;
 }) {
-  const [adminId, setAdminId] = useState("admin");
-  const [password, setPassword] = useState("ChangeMe123!");
+  const [adminId, setAdminId] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   return (
@@ -482,10 +460,21 @@ export function AdminLogin({
         </div>
         <div className="space-y-5">
           <Field label="Admin ID">
-            <input value={adminId} onChange={(e) => setAdminId(e.target.value)} className={`${inputClasses} focus:border-violet-300/70`} />
+            <input
+              value={adminId}
+              placeholder="admin"
+              onChange={(e) => setAdminId(e.target.value)}
+              className={`${inputClasses} focus:border-violet-300/70`}
+            />
           </Field>
           <Field label="Password">
-            <input value={password} type="password" onChange={(e) => setPassword(e.target.value)} className={`${inputClasses} focus:border-violet-300/70`} />
+            <input
+              value={password}
+              type="password"
+              placeholder="Enter admin password"
+              onChange={(e) => setPassword(e.target.value)}
+              className={`${inputClasses} focus:border-violet-300/70`}
+            />
           </Field>
         </div>
         {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}

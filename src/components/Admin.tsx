@@ -85,7 +85,7 @@ export function AdminConsole({
               <p className="text-xs uppercase tracking-[0.5em] text-violet-200/80">Isolated admin · live</p>
             </div>
             <h1 className="mt-2 text-4xl font-black tracking-[-0.08em] sm:text-5xl">Operations control room</h1>
-            <p className="mt-2 text-sm text-slate-400">Registration alerts are forwarded to {OWNER_EMAIL}</p>
+            <p className="mt-2 text-sm text-slate-400">Registration alerts are forwarded to the platform operations team.</p>
           </div>
           <button onClick={onBack} className="w-fit rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/40 hover:text-white">
             Exit admin
@@ -144,7 +144,7 @@ function SecurityTab({ onChangePassword }: { onChangePassword: (currentPassword:
         <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-300">
           <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">Passwords hashed with per-account random salts (SHA-256, Web Crypto) — never stored or transmitted in plain text in this UI.</li>
           <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">Brute-force lockout: 5 failed logins lock the account (user or admin) for 5 minutes.</li>
-          <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">Registration requires OTP verification of email or phone before an account is created.</li>
+          <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">Registration requires OTP verification of phone before an account is created.</li>
           <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">Admin session namespace is fully isolated from the player application.</li>
           <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">Production upgrade path: PHP <code className="text-violet-200">password_hash()</code> (bcrypt) server-side, HTTPS-only cookies, CSRF tokens, and rate limiting at the web server.</li>
         </ul>
@@ -178,7 +178,7 @@ function OverviewTab({
         <InfoStrip label="Pending deposits" value={String(deposits.length)} />
         <InfoStrip label="Pending withdrawals" value={String(withdrawals.length)} />
         <InfoStrip label="Open support tickets" value={String(tickets.length)} />
-        <InfoStrip label="Real credits in wallets" value={formatCredits(users.reduce((sum, u) => sum + u.realWallet, 0))} />
+        <InfoStrip label="Total balance in wallets" value={formatCredits(users.reduce((sum, u) => sum + u.realWallet, 0))} />
       </div>
 
       <SectionCard>
@@ -222,9 +222,9 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
               <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
                 <th className="py-3 pr-4">User ID</th>
                 <th className="py-3 pr-4">Name</th>
-                <th className="py-3 pr-4">Email / Phone</th>
-                <th className="py-3 pr-4">Play wallet</th>
-                <th className="py-3 pr-4">Real credits</th>
+                <th className="py-3 pr-4">Phone</th>
+                <th className="py-3 pr-4">Demo wallet</th>
+                <th className="py-3 pr-4">My balance</th>
                 <th className="py-3">Registered</th>
               </tr>
             </thead>
@@ -234,8 +234,7 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
                   <td className="py-3 pr-4 font-mono text-cyan-100">{user.userId}</td>
                   <td className="py-3 pr-4 font-semibold text-white">{user.name}</td>
                   <td className="py-3 pr-4 text-slate-300">
-                    {user.email}
-                    {user.phone && <span className="block text-xs text-slate-500">{user.phone}</span>}
+                    {user.phone || "—"}
                   </td>
                   <td className="py-3 pr-4 font-mono text-slate-300">{formatCredits(user.wallet)}</td>
                   <td className="py-3 pr-4 font-mono text-emerald-200">{formatCredits(user.realWallet)}</td>
@@ -250,7 +249,7 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
 
       <SectionCard>
         <h2 className="text-xl font-bold">Login &amp; registration stream</h2>
-        <p className="mt-1 text-sm text-slate-400">Each event is also emailed to {OWNER_EMAIL}.</p>
+        <p className="mt-1 text-sm text-slate-400">Each event is also forwarded to the platform operations team.</p>
         <div className="mt-4 max-h-[30rem] space-y-3 overflow-y-auto pr-1">
           {authEvents.length === 0 ? (
             <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No login activity yet.</p>
@@ -438,7 +437,7 @@ function SettlementTab({ markets, onSettleMarket }: { markets: Market[]; onSettl
         <ChecklistItem>Betting cutoffs: Taiwan 10:53 AM · KOSPI 11:53 AM · Hang Seng 1:32 PM · SENSEX 3:23 PM · DAX 8:55 PM · Dow Jones 12:00 AM.</ChecklistItem>
         <ChecklistItem>Duplicate transaction IDs cannot be submitted twice.</ChecklistItem>
         <ChecklistItem>Withdrawal amounts are held immediately to prevent double spending; rejects refund instantly.</ChecklistItem>
-        <ChecklistItem>Registrations and logins are OTP verified and reported to {OWNER_EMAIL}.</ChecklistItem>
+        <ChecklistItem>Registrations and logins are OTP verified and reported to platform operations.</ChecklistItem>
         <ChecklistItem>Admin session is fully isolated from the player application.</ChecklistItem>
       </SectionCard>
     </div>
