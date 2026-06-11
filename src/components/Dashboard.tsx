@@ -45,6 +45,28 @@ import type {
 } from "@/lib/types";
 import { Field, InfoStrip, PasswordChangeForm, SectionCard, StatusBadge, inputClasses } from "@/components/ui";
 
+// ─── Safe timeAgo wrapper ─────────────────────────────────────────────────────
+
+function safeTimeAgo(date: Date | string | number | undefined | null): string {
+  if (!date) return "Just now";
+
+  try {
+    // If it's a number (timestamp), convert to date string
+    if (typeof date === "number") {
+      return timeAgo(new Date(date).toISOString());
+    }
+    // If it's a string, use directly
+    if (typeof date === "string") {
+      return timeAgo(date);
+    }
+    // If it's a Date object, convert to string
+    return timeAgo(date.toISOString());
+  } catch (e) {
+    console.warn("Invalid date in timeAgo:", date, e);
+    return "Just now";
+  }
+}
+
 export type UserTab = MarketId | "bets" | "wallet" | "support" | "profile";
 
 /** Safely parse a number input, returning fallback for invalid values. */
@@ -102,14 +124,17 @@ export function Dashboard({
   onTicket: (topic: string, message: string, transactionId?: string, screenshot?: string, screenshotName?: string) => void;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }) {
-  const activeMarket = markets.find((market) => market.id === activeTab);
+  const activeMarket = markets.find((market) => market?.id === activeTab);
 
   // Memoize pending stats to avoid recomputing on every render
   const { pendingBetsCount, pendingStake } = useMemo(() => {
-    const pending = bets.filter((bet) => bet.status === "pending");
+    const pending = bets.filter((bet) => bet?.status === "pending");
     return {
       pendingBetsCount: pending.length,
-      pendingStake: pending.reduce((sum, bet) => sum + bet.stake, 0),
+      pendingStake: pending.reduce((sum, bet) => {
+        const stake = Number(bet?.stake);
+        return sum + (Number.isFinite(stake) ? stake : 0);
+      }, 0),
     };
   }, [bets]);
 
@@ -129,11 +154,11 @@ export function Dashboard({
                 <LockKeyhole className="h-5 w-5 shrink-0 text-cyan-200" />
                 <div className="min-w-0">
                   <p className="truncate text-xs uppercase tracking-[0.24em] text-slate-400">Locked profile</p>
-                  <p className="truncate font-mono text-sm font-bold text-cyan-100">{user.userId}</p>
+                  <p className="truncate font-mono text-sm font-bold text-cyan-100">{user?.userId || "N/A"}</p>
                 </div>
               </div>
             </div>
-            <MetricPill icon={<WalletCards className="h-4 w-4" />} label="Balance" value={formatCredits(user.wallet)} accent />
+            <MetricPill icon={<WalletCards className="h-4 w-4" />} label="Balance" value={formatCredits(Number(user?.wallet) || 0)} accent />
             <MetricPill
               icon={<TimerReset className="h-4 w-4" />}
               label="Pending bets"
@@ -149,11 +174,14 @@ export function Dashboard({
         </header>
 
         <div className="mb-5 flex gap-2 overflow-x-auto rounded-full border border-white/10 bg-white/[0.03] p-2">
-          {markets.map((market) => (
-            <TabButton key={market.id} active={activeTab === market.id} onClick={() => onTabChange(market.id)} accent="cyan">
-              {market.name}
-            </TabButton>
-          ))}
+          {markets.map((market) => {
+            if (!market || !market.id) return null;
+            return (
+              <TabButton key={market.id} active={activeTab === market.id} onClick={() => onTabChange(market.id)} accent="cyan">
+                {market.name || "Unknown"}
+              </TabButton>
+            );
+          })}
           <TabButton active={activeTab === "bets"} onClick={() => onTabChange("bets")} accent="white">
             My Bets
           </TabButton>
@@ -170,7 +198,7 @@ export function Dashboard({
 
         <section className="mt-5 animate-fade-up">
           {activeMarket ? (
-            <MarketPanel market={activeMarket} bets={bets} wallet={user.wallet} onPlaceBet={onPlaceBet} />
+            <MarketPanel market={activeMarket} bets={bets} wallet={Number(user?.wallet) || 0} onPlaceBet={onPlaceBet} />
           ) : activeTab === "bets" ? (
             <BetsPanel bets={bets} />
           ) : activeTab === "wallet" ? (
@@ -232,14 +260,17 @@ function MarketPanel({
 
   // Memoize derived data so we don't re-filter on every clock tick
   const { marketBets, pendingMarketBets, marketPendingStake } = useMemo(() => {
-    const mBets = bets.filter((bet) => bet?.marketId === market.id);
+    const mBets = bets.filter((bet) => bet && bet.marketId === market?.id);
     const pending = mBets.filter((bet) => bet?.status === "pending");
     return {
       marketBets: mBets,
       pendingMarketBets: pending,
-      marketPendingStake: pending.reduce((sum, bet) => sum + (Number(bet?.stake) || 0), 0),
+      marketPendingStake: pending.reduce((sum, bet) => {
+        const stake = Number(bet?.stake);
+        return sum + (Number.isFinite(stake) ? stake : 0);
+      }, 0),
     };
-  }, [bets, market.id]);
+  }, [bets, market?.id]);
 
   const bettingOpen = isBettingOpen(market, now);
   const countdown = timeUntilCutoff(market, now);
@@ -248,6 +279,14 @@ function MarketPanel({
   const lastPrice = Number(market?.lastPrice) || 0;
   const change = Number(market?.change) || 0;
   const resultDecimal = market?.resultDecimal || "--";
+
+  if (!market) {
+    return (
+      <SectionCard>
+        <p className="text-red-400">Error: Market data not available</p>
+      </SectionCard>
+    );
+  }
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
@@ -300,7 +339,7 @@ function MarketPanel({
             />
             <TickerMetric
               label="Change"
-              value={`${change > 0 ? "+" : ""}${change}%`}
+              value={`${change > 0 ? "+" : ""}${change.toFixed(2)}%`}
               tone={change >= 0 ? "good" : "bad"}
             />
             <TickerMetric label="Winning digits" value={`.${resultDecimal}`} tone="accent" />
@@ -314,7 +353,7 @@ function MarketPanel({
           <div className="mt-8">
             <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">Historical closing decimals</p>
             <div className="flex flex-wrap gap-2">
-              {market?.history && market.history.length > 0 ? (
+              {market?.history && Array.isArray(market.history) && market.history.length > 0 ? (
                 market.history.map((digit, index) => (
                   <span
                     key={`${digit}-${index}`}
@@ -350,7 +389,7 @@ function MarketPanel({
               </p>
             ) : (
               marketBets.slice(0, 4).map((bet) => {
-                if (!bet) return null; // FIX: Skip undefined bets
+                if (!bet || !bet.id) return null;
                 return <BetRow key={bet.id} bet={bet} />;
               })
             )}
@@ -621,10 +660,16 @@ function SlipMetric({ label, value }: { label: string; value: string }) {
 
 function BetsPanel({ bets }: { bets: Bet[] }) {
   const analytics = useMemo(() => {
-    const won = bets.filter((bet) => bet.status === "won").length;
-    const lost = bets.filter((bet) => bet.status === "lost").length;
-    const staked = bets.reduce((sum, bet) => sum + bet.stake, 0);
-    const paid = bets.reduce((sum, bet) => sum + (bet.payout ?? 0), 0);
+    const won = bets.filter((bet) => bet?.status === "won").length;
+    const lost = bets.filter((bet) => bet?.status === "lost").length;
+    const staked = bets.reduce((sum, bet) => {
+      const stake = Number(bet?.stake);
+      return sum + (Number.isFinite(stake) ? stake : 0);
+    }, 0);
+    const paid = bets.reduce((sum, bet) => {
+      const payout = Number(bet?.payout);
+      return sum + (Number.isFinite(payout) ? payout : 0);
+    }, 0);
     return { won, lost, staked, paid };
   }, [bets]);
 
@@ -652,7 +697,10 @@ function BetsPanel({ bets }: { bets: Bet[] }) {
               Your ledger is empty. Open a market tab to place the first bet.
             </p>
           ) : (
-            bets.map((bet) => <BetRow key={bet.id} bet={bet} />)
+            bets.map((bet) => {
+              if (!bet || !bet.id) return null;
+              return <BetRow key={bet.id} bet={bet} />;
+            })
           )}
         </div>
       </SectionCard>
@@ -673,7 +721,12 @@ export function BetRow({ bet, showUser = false }: { bet: Bet; showUser?: boolean
     );
 
   // Handle case where mode === "split" but splitSide is undefined
-  const modeLabel = bet.mode === "double" ? "Double" : bet.splitSide ?? "Split";
+  const modeLabel = bet.mode === "double" ? "Double" : (bet.splitSide ?? "Split");
+
+  // Safe conversions
+  const safeStake = Number(bet?.stake) || 0;
+  const safePotential = Number(bet?.potentialReturn) || 0;
+  const safePlacedAt = bet?.placedAt || Date.now();
 
   return (
     <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 sm:grid-cols-[1.3fr_0.8fr_0.8fr_0.6fr] sm:items-center">
@@ -681,17 +734,17 @@ export function BetRow({ bet, showUser = false }: { bet: Bet; showUser?: boolean
         {statusIcon}
         <div className="min-w-0">
           <p className="truncate font-bold text-white">
-            {bet.marketName}
+            {bet.marketName || "Unknown Market"}
             {showUser && <span className="ml-2 font-mono text-xs font-normal text-cyan-200">{bet.userId}</span>}
           </p>
           <p className="truncate text-sm text-slate-400">
-            {modeLabel} selection: {bet.selection} · {timeAgo(bet.placedAt)}
+            {modeLabel} selection: {bet.selection} · {safeTimeAgo(safePlacedAt)}
           </p>
         </div>
       </div>
-      <p className="font-mono text-sm text-slate-300">Stake {formatCredits(bet.stake)}</p>
-      <p className="font-mono text-sm text-cyan-100">Potential {formatCredits(bet.potentialReturn)}</p>
-      <p className="text-sm font-bold uppercase tracking-[0.18em] text-slate-300">{bet.status}</p>
+      <p className="font-mono text-sm text-slate-300">Stake {formatCredits(safeStake)}</p>
+      <p className="font-mono text-sm text-cyan-100">Potential {formatCredits(safePotential)}</p>
+      <p className="text-sm font-bold uppercase tracking-[0.18em] text-slate-300">{bet.status || "pending"}</p>
     </div>
   );
 }
@@ -724,8 +777,8 @@ function WalletPanel({
   const [ifsc, setIfsc] = useState("");
   const [withdrawMsg, setWithdrawMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  const pendingDeposits = deposits.filter((d) => d.status === "pending").length;
-  const pendingWithdrawals = withdrawals.filter((w) => w.status === "pending").length;
+  const pendingDeposits = deposits.filter((d) => d?.status === "pending").length;
+  const pendingWithdrawals = withdrawals.filter((w) => w?.status === "pending").length;
 
   // Auto-dismiss success messages
   useEffect(() => {
@@ -776,7 +829,7 @@ function WalletPanel({
       setWithdrawMsg({ kind: "err", text: `Minimum withdrawal is ${MIN_WITHDRAW} credits.` });
       return;
     }
-    if (safeAmount > user.wallet) {
+    if (safeAmount > (Number(user?.wallet) || 0)) {
       setWithdrawMsg({ kind: "err", text: "Amount exceeds available balance." });
       return;
     }
@@ -813,7 +866,7 @@ function WalletPanel({
     <div className="space-y-5">
       {/* Stats - Fixed grid columns */}
       <div className="grid gap-4 md:grid-cols-3">
-        <InfoStrip label="Balance" value={formatCredits(user.wallet)} />
+        <InfoStrip label="Balance" value={formatCredits(Number(user?.wallet) || 0)} />
         <InfoStrip label="Pending deposits" value={String(pendingDeposits)} />
         <InfoStrip label="Pending withdrawals" value={String(pendingWithdrawals)} />
       </div>
@@ -836,7 +889,7 @@ function WalletPanel({
               className="h-56 w-56 shrink-0 rounded-[1.5rem] border border-white/10 bg-white object-cover shadow-[0_0_40px_rgba(34,211,238,0.15)]"
             />
             <div className="min-w-0">
-              <p className="font-mono text-sm text-cyan-100">Payment reference: {user.userId}</p>
+              <p className="font-mono text-sm text-cyan-100">Payment reference: {user?.userId || "N/A"}</p>
               <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-6 text-slate-300">
                 <li>Scan the QR with any UPI app and pay your deposit amount.</li>
                 <li>
@@ -889,17 +942,20 @@ function WalletPanel({
           </button>
 
           <div className="mt-6 space-y-3">
-            {deposits.slice(0, 5).map((deposit) => (
-              <div key={deposit.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-sm text-white">{deposit.transactionId}</p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {formatCredits(deposit.amount)} · {timeAgo(deposit.createdAt)}
-                  </p>
+            {deposits.slice(0, 5).map((deposit) => {
+              if (!deposit || !deposit.id) return null;
+              return (
+                <div key={deposit.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-sm text-white">{deposit.transactionId || "N/A"}</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {formatCredits(Number(deposit?.amount) || 0)} · {safeTimeAgo(deposit?.createdAt)}
+                    </p>
+                  </div>
+                  <StatusBadge label={deposit.status || "pending"} classes={getRequestStatusClasses(deposit.status || "pending")} />
                 </div>
-                <StatusBadge label={deposit.status} classes={getRequestStatusClasses(deposit.status)} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -945,11 +1001,11 @@ function WalletPanel({
               />
             </Field>
             <div className="sm:col-span-2">
-              <Field label={`Amount to withdraw (min ${MIN_WITHDRAW}, available ${formatCredits(user.wallet)})`}>
+              <Field label={`Amount to withdraw (min ${MIN_WITHDRAW}, available ${formatCredits(Number(user?.wallet) || 0)})`}>
                 <input
                   type="number"
                   min={MIN_WITHDRAW}
-                  max={user.wallet}
+                  max={Number(user?.wallet) || 0}
                   value={wAmount}
                   onChange={(e) => setWAmount(safeNumber(e.target.value, 0))}
                   className={inputClasses}
@@ -982,19 +1038,22 @@ function WalletPanel({
           </p>
 
           <div className="mt-6 space-y-3">
-            {withdrawals.slice(0, 5).map((withdrawal) => (
-              <div key={withdrawal.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-sm text-white">
-                    {withdrawal.bankName} ····{withdrawal.accountNumber.slice(-4)}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-400">
-                    {formatCredits(withdrawal.amount)} · {timeAgo(withdrawal.createdAt)}
-                  </p>
+            {withdrawals.slice(0, 5).map((withdrawal) => {
+              if (!withdrawal || !withdrawal.id) return null;
+              return (
+                <div key={withdrawal.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-sm text-white">
+                      {withdrawal.bankName || "N/A"} ····{(withdrawal.accountNumber || "").slice(-4)}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {formatCredits(Number(withdrawal?.amount) || 0)} · {safeTimeAgo(withdrawal?.createdAt)}
+                    </p>
+                  </div>
+                  <StatusBadge label={withdrawal.status || "pending"} classes={getRequestStatusClasses(withdrawal.status || "pending")} />
                 </div>
-                <StatusBadge label={withdrawal.status} classes={getRequestStatusClasses(withdrawal.status)} />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       </div>
@@ -1231,17 +1290,20 @@ function SupportPanel({
               No tickets yet. Use the agent chat to report a deposit problem.
             </p>
           ) : (
-            tickets.map((ticket) => (
-              <div key={ticket.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-bold text-white">{ticket.topic}</p>
-                  <StatusBadge label={ticket.status} classes={getRequestStatusClasses(ticket.status)} />
+            tickets.map((ticket) => {
+              if (!ticket || !ticket.id) return null;
+              return (
+                <div key={ticket.id} className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-bold text-white">{ticket.topic || "Unknown"}</p>
+                    <StatusBadge label={ticket.status || "open"} classes={getRequestStatusClasses(ticket.status || "open")} />
+                  </div>
+                  <p className="mt-2 text-sm text-slate-400">{ticket.message || "No message"}</p>
+                  {ticket.transactionId && <p className="mt-2 font-mono text-sm text-cyan-100">TX: {ticket.transactionId}</p>}
+                  <p className="mt-2 text-xs text-slate-500">{safeTimeAgo(ticket?.createdAt)}</p>
                 </div>
-                <p className="mt-2 text-sm text-slate-400">{ticket.message}</p>
-                {ticket.transactionId && <p className="mt-2 font-mono text-sm text-cyan-100">TX: {ticket.transactionId}</p>}
-                <p className="mt-2 text-xs text-slate-500">{timeAgo(ticket.createdAt)}</p>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </SectionCard>
@@ -1263,12 +1325,21 @@ function ProfilePanel({
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }) {
   const stats = useMemo(() => {
-    const won = bets.filter((bet) => bet.status === "won");
-    const lost = bets.filter((bet) => bet.status === "lost");
-    const pending = bets.filter((bet) => bet.status === "pending");
-    const totalStaked = bets.reduce((sum, bet) => sum + bet.stake, 0);
-    const totalWinnings = bets.reduce((sum, bet) => sum + (bet.payout ?? 0), 0);
-    const biggestWin = won.reduce((max, bet) => Math.max(max, bet.payout ?? 0), 0);
+    const won = bets.filter((bet) => bet?.status === "won");
+    const lost = bets.filter((bet) => bet?.status === "lost");
+    const pending = bets.filter((bet) => bet?.status === "pending");
+    const totalStaked = bets.reduce((sum, bet) => {
+      const stake = Number(bet?.stake);
+      return sum + (Number.isFinite(stake) ? stake : 0);
+    }, 0);
+    const totalWinnings = bets.reduce((sum, bet) => {
+      const payout = Number(bet?.payout);
+      return sum + (Number.isFinite(payout) ? payout : 0);
+    }, 0);
+    const biggestWin = won.reduce((max, bet) => {
+      const payout = Number(bet?.payout);
+      return Math.max(max, Number.isFinite(payout) ? payout : 0);
+    }, 0);
     const settled = won.length + lost.length;
     // Avoid divide-by-zero
     const winRate = settled > 0 ? Math.round((won.length / settled) * 100) : 0;
@@ -1296,12 +1367,12 @@ function ProfilePanel({
             </div>
           </div>
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <InfoStrip label="Unique User ID" value={user.userId} />
-            <InfoStrip label="Full name" value={user.name} />
-            <InfoStrip label="Phone" value={user.phone || "—"} />
-            <InfoStrip label="Member since" value={new Date(user.createdAt).toLocaleDateString()} />
+            <InfoStrip label="Unique User ID" value={user?.userId || "N/A"} />
+            <InfoStrip label="Full name" value={user?.name || "Unknown"} />
+            <InfoStrip label="Phone" value={user?.phone || "—"} />
+            <InfoStrip label="Member since" value={user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Unknown"} />
             <InfoStrip label="Account status" value="Verified · OTP" />
-            <InfoStrip label="Balance" value={formatCredits(user.wallet)} />
+            <InfoStrip label="Balance" value={formatCredits(Number(user?.wallet) || 0)} />
           </div>
         </SectionCard>
 

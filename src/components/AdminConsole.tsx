@@ -38,6 +38,28 @@ import {
   inputClasses,
 } from "@/components/ui";
 
+// ─── Safe timeAgo wrapper ─────────────────────────────────────────────────────
+
+function safeTimeAgo(date: Date | string | number | undefined | null): string {
+  if (!date) return "Just now";
+
+  try {
+    // If it's a number (timestamp), convert to date string
+    if (typeof date === "number") {
+      return timeAgo(new Date(date).toISOString());
+    }
+    // If it's a string, use directly
+    if (typeof date === "string") {
+      return timeAgo(date);
+    }
+    // If it's a Date object, convert to string
+    return timeAgo(date.toISOString());
+  } catch (e) {
+    console.warn("Invalid date in timeAgo:", date, e);
+    return "Just now";
+  }
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type AdminTab =
@@ -95,9 +117,19 @@ export function AdminConsole({
   ) => Promise<string | null>;
 }) {
   const [tab, setTab] = useState<AdminTab>("overview");
-  const pendingDeposits = deposits.filter((d) => d.status === "pending");
-  const pendingWithdrawals = withdrawals.filter((w) => w.status === "pending");
-  const openTickets = tickets.filter((t) => t.status === "open");
+
+  // Safety: ensure arrays exist
+  const safeUsers = Array.isArray(users) ? users : [];
+  const safeBets = Array.isArray(bets) ? bets : [];
+  const safeDeposits = Array.isArray(deposits) ? deposits : [];
+  const safeWithdrawals = Array.isArray(withdrawals) ? withdrawals : [];
+  const safeTickets = Array.isArray(tickets) ? tickets : [];
+  const safeEvents = Array.isArray(events) ? events : [];
+  const safeMarkets = Array.isArray(markets) ? markets : [];
+
+  const pendingDeposits = safeDeposits.filter((d) => d?.status === "pending");
+  const pendingWithdrawals = safeWithdrawals.filter((w) => w?.status === "pending");
+  const openTickets = safeTickets.filter((t) => t?.status === "open");
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
     { id: "overview", label: "Live Feed" },
@@ -105,7 +137,7 @@ export function AdminConsole({
     {
       id: "bets",
       label: "Live Bets",
-      badge: bets.filter((b) => b.status === "pending").length,
+      badge: safeBets.filter((b) => b?.status === "pending").length,
     },
     { id: "deposits", label: "Deposits", badge: pendingDeposits.length },
     {
@@ -176,40 +208,40 @@ export function AdminConsole({
         {/* Tab panels */}
         {tab === "overview" && (
           <OverviewTab
-            users={users}
-            bets={bets}
+            users={safeUsers}
+            bets={safeBets}
             deposits={pendingDeposits}
             withdrawals={pendingWithdrawals}
             tickets={openTickets}
-            events={events}
-            markets={markets}
+            events={safeEvents}
+            markets={safeMarkets}
           />
         )}
-        {tab === "users" && <UsersTab users={users} events={events} />}
+        {tab === "users" && <UsersTab users={safeUsers} events={safeEvents} />}
         {tab === "bets" && (
-          <BetsTab bets={bets} onRejectBet={onRejectBet} />
+          <BetsTab bets={safeBets} onRejectBet={onRejectBet} />
         )}
         {tab === "deposits" && (
           <DepositsTab
-            deposits={deposits}
+            deposits={safeDeposits}
             onApprove={onApproveDeposit}
             onReject={onRejectDeposit}
           />
         )}
         {tab === "withdrawals" && (
           <WithdrawalsTab
-            withdrawals={withdrawals}
+            withdrawals={safeWithdrawals}
             onApprove={onApproveWithdraw}
             onReject={onRejectWithdraw}
           />
         )}
         {tab === "support" && (
-          <SupportTab tickets={tickets} onResolve={onResolveTicket} />
+          <SupportTab tickets={safeTickets} onResolve={onResolveTicket} />
         )}
         {tab === "settlement" && (
           <SettlementTab
-            bets={bets}
-            markets={markets}
+            bets={safeBets}
+            markets={safeMarkets}
             onSettleMarket={onSettleMarket}
             onCloseMarket={onCloseMarket}
             onOpenMarket={onOpenMarket}
@@ -313,7 +345,7 @@ function OverviewTab({
   const marketSummaries = useMemo(
     () =>
       markets
-        .filter((m) => m) // FIX: Filter out undefined markets
+        .filter((m) => m && m.id)
         .map((market) => {
           const pendingBets = bets.filter(
             (bet) => bet && bet.marketId === market.id && bet.status === "pending"
@@ -323,7 +355,10 @@ function OverviewTab({
             name: market.name || "Unknown",
             status: market.status || "settled",
             pendingCount: pendingBets.length,
-            pendingStake: pendingBets.reduce((sum, bet) => sum + (Number(bet?.stake) || 0), 0),
+            pendingStake: pendingBets.reduce((sum, bet) => {
+              const stake = Number(bet?.stake);
+              return sum + (Number.isFinite(stake) ? stake : 0);
+            }, 0),
           };
         })
         .sort((a, b) => (b.pendingStake || 0) - (a.pendingStake || 0)),
@@ -333,6 +368,11 @@ function OverviewTab({
   const openMarkets = markets.filter((m) => m?.status === "open").length;
   const lockedMarkets = markets.filter((m) => m?.status === "locked").length;
   const settledMarkets = markets.filter((m) => m?.status === "settled").length;
+
+  const totalWalletBalance = users.reduce((sum, u) => {
+    const wallet = Number(u?.wallet);
+    return sum + (Number.isFinite(wallet) ? wallet : 0);
+  }, 0);
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
@@ -345,7 +385,7 @@ function OverviewTab({
         <InfoStrip label="Open support tickets" value={String(tickets?.length || 0)} />
         <InfoStrip
           label="Total balance in wallets"
-          value={formatCredits(users?.reduce((sum, u) => sum + (Number(u?.wallet) || 0), 0) || 0)}
+          value={formatCredits(totalWalletBalance)}
         />
       </div>
 
@@ -417,20 +457,23 @@ function OverviewTab({
               No activity yet. Events appear here in real time.
             </p>
           ) : (
-            events?.map((event) => (
-              <div
-                key={event?.id}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-bold text-white">{event?.title || "Unknown Event"}</p>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {timeAgo(event?.at || Date.now())}
-                  </span>
+            events?.map((event) => {
+              if (!event || !event.id) return null;
+              return (
+                <div
+                  key={event.id}
+                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-bold text-white">{event?.title || "Unknown Event"}</p>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {safeTimeAgo(event?.at)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">{event?.detail || "No details"}</p>
                 </div>
-                <p className="mt-1 text-sm text-slate-400">{event?.detail || "No details"}</p>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </SectionCard>
@@ -448,7 +491,7 @@ function UsersTab({
   events: ActivityEvent[];
 }) {
   const authEvents = events.filter(
-    (event) => event.type === "registration" || event.type === "login"
+    (event) => event?.type === "registration" || event?.type === "login"
   );
 
   return (
@@ -470,25 +513,28 @@ function UsersTab({
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
-                <tr key={user.userId} className="border-b border-white/5">
-                  <td className="py-3 pr-4 font-mono text-cyan-100">
-                    {user.userId}
-                  </td>
-                  <td className="py-3 pr-4 font-semibold text-white">
-                    {user.name}
-                  </td>
-                  <td className="py-3 pr-4 text-slate-300">
-                    {user.phone || "—"}
-                  </td>
-                  <td className="py-3 pr-4 font-mono text-slate-300">
-                    {formatCredits(user.wallet)}
-                  </td>
-                  <td className="py-3 text-slate-400">
-                    {timeAgo(user.createdAt)}
-                  </td>
-                </tr>
-              ))}
+              {users.map((user) => {
+                if (!user || !user.userId) return null;
+                return (
+                  <tr key={user.userId} className="border-b border-white/5">
+                    <td className="py-3 pr-4 font-mono text-cyan-100">
+                      {user.userId}
+                    </td>
+                    <td className="py-3 pr-4 font-semibold text-white">
+                      {user.name || "Unknown"}
+                    </td>
+                    <td className="py-3 pr-4 text-slate-300">
+                      {user.phone || "—"}
+                    </td>
+                    <td className="py-3 pr-4 font-mono text-slate-300">
+                      {formatCredits(Number(user?.wallet) || 0)}
+                    </td>
+                    <td className="py-3 text-slate-400">
+                      {safeTimeAgo(user?.createdAt)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {users.length === 0 && (
@@ -510,20 +556,23 @@ function UsersTab({
               No login activity yet.
             </p>
           ) : (
-            authEvents.map((event) => (
-              <div
-                key={event.id}
-                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-bold text-white">{event.title}</p>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {timeAgo(event.at)}
-                  </span>
+            authEvents.map((event) => {
+              if (!event || !event.id) return null;
+              return (
+                <div
+                  key={event.id}
+                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-bold text-white">{event.title || "Unknown"}</p>
+                    <span className="shrink-0 text-xs text-slate-500">
+                      {safeTimeAgo(event?.at)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">{event.detail || "No details"}</p>
                 </div>
-                <p className="mt-1 text-sm text-slate-400">{event.detail}</p>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </SectionCard>
@@ -540,23 +589,26 @@ function BetsTab({
   bets: Bet[];
   onRejectBet: (betId: string) => void;
 }) {
-  const pendingBets = bets.filter((bet) => bet.status === "pending");
+  const pendingBets = bets.filter((bet) => bet?.status === "pending");
   const totalBetsPlaced = bets.length;
-  const totalStakePlaced = bets.reduce((sum, bet) => sum + bet.stake, 0);
+  const totalStakePlaced = bets.reduce((sum, bet) => {
+    const stake = Number(bet?.stake);
+    return sum + (Number.isFinite(stake) ? stake : 0);
+  }, 0);
 
   // Exposure grouped by market + mode + selection
   const exposure = useMemo(
     () =>
       Array.from(
         pendingBets.reduce(
-          (
-            map,
-            bet
-          ) => {
+          (map, bet) => {
+            if (!bet || !bet.marketName || !bet.selection) return map;
             const key = `${bet.marketName}|${bet.mode}|${bet.selection}`;
+            const stake = Number(bet.stake);
+            const safeStake = Number.isFinite(stake) ? stake : 0;
             const current = map.get(key);
             if (current) {
-              current.totalStake += bet.stake;
+              current.totalStake += safeStake;
               current.count += 1;
             } else {
               map.set(key, {
@@ -564,7 +616,7 @@ function BetsTab({
                 marketName: bet.marketName,
                 mode: bet.mode,
                 selection: bet.selection,
-                totalStake: bet.stake,
+                totalStake: safeStake,
                 count: 1,
               });
             }
@@ -582,32 +634,35 @@ function BetsTab({
             }
           >()
         )
-      ).sort((a, b) => b[1].totalStake - a[1].totalStake).map(([, v]) => v),
+      ).sort((a, b) => (b[1]?.totalStake || 0) - (a[1]?.totalStake || 0)).map(([, v]) => v),
     [pendingBets]
   );
 
-  // Top single-number totals across ALL bets (not just pending)
+  // Top single-number totals across ALL bets
   const singleNumberTotals = useMemo(() => {
     const map = new Map<
       string,
       { key: string; label: string; totalStake: number; count: number }
     >();
     bets.forEach((bet) => {
+      if (!bet || !bet.marketName || !bet.selection) return;
       const label =
         bet.mode === "double"
           ? `Double ${bet.selection}`
           : `${bet.splitSide ?? "Split"} ${bet.selection}`;
       const key = `${bet.marketName}|${label}`;
+      const stake = Number(bet.stake);
+      const safeStake = Number.isFinite(stake) ? stake : 0;
       const current = map.get(key);
       if (current) {
-        current.totalStake += bet.stake;
+        current.totalStake += safeStake;
         current.count += 1;
       } else {
-        map.set(key, { key, label, totalStake: bet.stake, count: 1 });
+        map.set(key, { key, label, totalStake: safeStake, count: 1 });
       }
     });
     return Array.from(map.values())
-      .sort((a, b) => b.totalStake - a.totalStake)
+      .sort((a, b) => (b?.totalStake || 0) - (a?.totalStake || 0))
       .slice(0, 10);
   }, [bets]);
 
@@ -623,33 +678,42 @@ function BetsTab({
       }
     >();
     pendingBets.forEach((bet) => {
+      if (!bet || !bet.marketId || !bet.selection) return;
+      const stake = Number(bet.stake);
+      const safeStake = Number.isFinite(stake) ? stake : 0;
       const existing = marketMap.get(bet.marketId);
       if (existing) {
         existing.totals.set(
           bet.selection,
-          (existing.totals.get(bet.selection) ?? 0) + bet.stake
+          (existing.totals.get(bet.selection) ?? 0) + safeStake
         );
-        existing.totalStake += bet.stake;
+        existing.totalStake += safeStake;
         existing.count += 1;
       } else {
         marketMap.set(bet.marketId, {
-          marketName: bet.marketName,
-          totals: new Map([[bet.selection, bet.stake]]),
-          totalStake: bet.stake,
+          marketName: bet.marketName || "Unknown Market",
+          totals: new Map([[bet.selection, safeStake]]),
+          totalStake: safeStake,
           count: 1,
         });
       }
     });
-    return Array.from(marketMap.values()).map((item) => ({
-      ...item,
-      selections: Array.from(item.totals.entries()).sort(
-        (a, b) => b[1] - a[1]
-      ),
-      maxStake: Math.max(...Array.from(item.totals.values()), 0),
-    }));
+    return Array.from(marketMap.values()).map((item) => {
+      const maxStake = Math.max(...Array.from(item.totals.values()), 1);
+      return {
+        ...item,
+        selections: Array.from(item.totals.entries()).sort(
+          (a, b) => (b[1] || 0) - (a[1] || 0)
+        ),
+        maxStake,
+      };
+    });
   }, [pendingBets]);
 
-  const totalPendingStake = pendingBets.reduce((sum, bet) => sum + bet.stake, 0);
+  const totalPendingStake = pendingBets.reduce((sum, bet) => {
+    const stake = Number(bet?.stake);
+    return sum + (Number.isFinite(stake) ? stake : 0);
+  }, 0);
 
   return (
     <div className="space-y-5">
@@ -744,16 +808,12 @@ function BetsTab({
                       </div>
                       <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-900">
                         <div
-                          className="h-full rounded-full bg-cyan-300"
+                          className="h-full rounded-full bg-cyan-300 transition-all duration-500"
                           style={{
-                            width: `${
-                              amount === 0
-                                ? 3
-                                : Math.max(
-                                    6,
-                                    (amount / market.maxStake) * 100
-                                  )
-                            }%`,
+                            width: `${Math.max(
+                              6,
+                              (amount / market.maxStake) * 100
+                            )}%`,
                           }}
                         />
                       </div>
@@ -861,36 +921,39 @@ function BetsTab({
               No pending bets at the moment.
             </p>
           ) : (
-            pendingBets.map((bet) => (
-              <div
-                key={bet.id}
-                className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/80 p-4 sm:grid-cols-[1fr_auto] sm:items-center"
-              >
-                <div>
-                  <p className="font-bold text-white">
-                    {bet.marketName} ·{" "}
-                    {bet.mode === "double" ? "Double" : bet.splitSide}{" "}
-                    {bet.selection}
-                  </p>
-                  <p className="mt-1 text-sm text-slate-300">
-                    {bet.userName} · {bet.userId} · stake{" "}
-                    {formatCredits(bet.stake)}
-                  </p>
-                  <p className="mt-1 text-sm uppercase tracking-[0.18em] text-slate-400">
-                    Status:{" "}
-                    {bet.status === "refunded" ? "Refunded" : bet.status}
-                  </p>
+            pendingBets.map((bet) => {
+              if (!bet || !bet.id) return null;
+              return (
+                <div
+                  key={bet.id}
+                  className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/80 p-4 sm:grid-cols-[1fr_auto] sm:items-center"
+                >
+                  <div>
+                    <p className="font-bold text-white">
+                      {bet.marketName || "Unknown"} ·{" "}
+                      {bet.mode === "double" ? "Double" : (bet.splitSide || "Split")}{" "}
+                      {bet.selection}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-300">
+                      {bet.userName || "Unknown"} · {bet.userId} · stake{" "}
+                      {formatCredits(Number(bet.stake) || 0)}
+                    </p>
+                    <p className="mt-1 text-sm uppercase tracking-[0.18em] text-slate-400">
+                      Status:{" "}
+                      {bet.status === "refunded" ? "Refunded" : bet.status}
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:items-end">
+                    <button
+                      onClick={() => onRejectBet(bet.id)}
+                      className="rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-400"
+                    >
+                      Reject bet &amp; refund
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-col gap-2 sm:items-end">
-                  <button
-                    onClick={() => onRejectBet(bet.id)}
-                    className="rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-400"
-                  >
-                    Reject bet &amp; refund
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </SectionCard>
@@ -925,32 +988,35 @@ function DepositsTab({
             No deposit requests yet.
           </p>
         ) : (
-          deposits.map((deposit) => (
-            <RequestCard
-              key={deposit.id}
-              status={deposit.status}
-              meta={[
-                {
-                  label: "User",
-                  value: `${deposit.userName} · ${deposit.userId}`,
-                },
-                { label: "Transaction ID", value: deposit.transactionId },
-                { label: "Amount", value: formatCredits(deposit.amount) },
-                { label: "Submitted", value: timeAgo(deposit.createdAt) },
-              ]}
-              onApprove={
-                deposit.status === "pending"
-                  ? () => onApprove(deposit.id)
-                  : undefined
-              }
-              onReject={
-                deposit.status === "pending"
-                  ? () => onReject(deposit.id)
-                  : undefined
-              }
-              approveLabel="Approve & credit wallet"
-            />
-          ))
+          deposits.map((deposit) => {
+            if (!deposit || !deposit.id) return null;
+            return (
+              <RequestCard
+                key={deposit.id}
+                status={deposit.status || "pending"}
+                meta={[
+                  {
+                    label: "User",
+                    value: `${deposit.userName || "Unknown"} · ${deposit.userId || "N/A"}`,
+                  },
+                  { label: "Transaction ID", value: deposit.transactionId || "N/A" },
+                  { label: "Amount", value: formatCredits(Number(deposit?.amount) || 0) },
+                  { label: "Submitted", value: safeTimeAgo(deposit?.createdAt) },
+                ]}
+                onApprove={
+                  deposit.status === "pending"
+                    ? () => onApprove(deposit.id)
+                    : undefined
+                }
+                onReject={
+                  deposit.status === "pending"
+                    ? () => onReject(deposit.id)
+                    : undefined
+                }
+                approveLabel="Approve & credit wallet"
+              />
+            );
+          })
         )}
       </div>
     </SectionCard>
@@ -984,45 +1050,48 @@ function WithdrawalsTab({
             No withdrawal requests yet.
           </p>
         ) : (
-          withdrawals.map((withdrawal) => (
-            <RequestCard
-              key={withdrawal.id}
-              status={withdrawal.status}
-              meta={[
-                {
-                  label: "User",
-                  value: `${withdrawal.userName} · ${withdrawal.userId}`,
-                },
-                {
-                  label: "Amount",
-                  value: formatCredits(withdrawal.amount),
-                },
-                {
-                  label: "Bank",
-                  value: `${withdrawal.bankName} · ${withdrawal.accountHolder}`,
-                },
-                {
-                  label: "Account",
-                  value: `${withdrawal.accountNumber} · ${withdrawal.ifsc}`,
-                },
-                {
-                  label: "Submitted",
-                  value: timeAgo(withdrawal.createdAt),
-                },
-              ]}
-              onApprove={
-                withdrawal.status === "pending"
-                  ? () => onApprove(withdrawal.id)
-                  : undefined
-              }
-              onReject={
-                withdrawal.status === "pending"
-                  ? () => onReject(withdrawal.id)
-                  : undefined
-              }
-              approveLabel="Initiate payout"
-            />
-          ))
+          withdrawals.map((withdrawal) => {
+            if (!withdrawal || !withdrawal.id) return null;
+            return (
+              <RequestCard
+                key={withdrawal.id}
+                status={withdrawal.status || "pending"}
+                meta={[
+                  {
+                    label: "User",
+                    value: `${withdrawal.userName || "Unknown"} · ${withdrawal.userId || "N/A"}`,
+                  },
+                  {
+                    label: "Amount",
+                    value: formatCredits(Number(withdrawal?.amount) || 0),
+                  },
+                  {
+                    label: "Bank",
+                    value: `${withdrawal.bankName || "N/A"} · ${withdrawal.accountHolder || "N/A"}`,
+                  },
+                  {
+                    label: "Account",
+                    value: `${withdrawal.accountNumber || "N/A"} · ${withdrawal.ifsc || "N/A"}`,
+                  },
+                  {
+                    label: "Submitted",
+                    value: safeTimeAgo(withdrawal?.createdAt),
+                  },
+                ]}
+                onApprove={
+                  withdrawal.status === "pending"
+                    ? () => onApprove(withdrawal.id)
+                    : undefined
+                }
+                onReject={
+                  withdrawal.status === "pending"
+                    ? () => onReject(withdrawal.id)
+                    : undefined
+                }
+                approveLabel="Initiate payout"
+              />
+            );
+          })
         )}
       </div>
     </SectionCard>
@@ -1052,49 +1121,52 @@ function SupportTab({
             No support tickets yet.
           </p>
         ) : (
-          tickets.map((ticket) => (
-            <div
-              key={ticket.id}
-              className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-bold text-white">{ticket.topic}</p>
-                <StatusBadge
-                  label={ticket.status}
-                  classes={getRequestStatusClasses(ticket.status)}
-                />
-              </div>
-              <p className="mt-1 font-mono text-xs text-cyan-200">
-                {ticket.userName} · {ticket.userId}
-              </p>
-              <p className="mt-2 text-sm text-slate-300">{ticket.message}</p>
-              {ticket.transactionId && (
-                <p className="mt-2 font-mono text-sm text-cyan-100">
-                  TX: {ticket.transactionId}
+          tickets.map((ticket) => {
+            if (!ticket || !ticket.id) return null;
+            return (
+              <div
+                key={ticket.id}
+                className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="font-bold text-white">{ticket.topic || "Unknown"}</p>
+                  <StatusBadge
+                    label={ticket.status || "open"}
+                    classes={getRequestStatusClasses(ticket.status || "open")}
+                  />
+                </div>
+                <p className="mt-1 font-mono text-xs text-cyan-200">
+                  {ticket.userName || "Unknown"} · {ticket.userId || "N/A"}
                 </p>
-              )}
-              {ticket.screenshot && (
-                <img
-                  src={ticket.screenshot}
-                  alt={`Payment screenshot from ${ticket.userId}`}
-                  className="mt-3 max-h-56 rounded-xl border border-white/10 object-contain"
-                />
-              )}
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-500">
-                  {timeAgo(ticket.createdAt)}
-                </span>
-                {ticket.status === "open" && (
-                  <button
-                    onClick={() => onResolve(ticket.id)}
-                    className="rounded-full bg-violet-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-white"
-                  >
-                    Mark verified &amp; resolved
-                  </button>
+                <p className="mt-2 text-sm text-slate-300">{ticket.message || "No message"}</p>
+                {ticket.transactionId && (
+                  <p className="mt-2 font-mono text-sm text-cyan-100">
+                    TX: {ticket.transactionId}
+                  </p>
                 )}
+                {ticket.screenshot && (
+                  <img
+                    src={ticket.screenshot}
+                    alt={`Payment screenshot from ${ticket.userId}`}
+                    className="mt-3 max-h-56 rounded-xl border border-white/10 object-contain"
+                  />
+                )}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="text-xs text-slate-500">
+                    {safeTimeAgo(ticket?.createdAt)}
+                  </span>
+                  {ticket.status === "open" && (
+                    <button
+                      onClick={() => onResolve(ticket.id)}
+                      className="rounded-full bg-violet-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-white"
+                    >
+                      Mark verified &amp; resolved
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </SectionCard>
@@ -1124,26 +1196,31 @@ function SettlementTab({
     null
   );
 
-  const activeMarket = markets.find((market) => market.id === selectedMarket);
+  const activeMarket = markets.find((market) => market?.id === selectedMarket);
 
   const marketSummaries = useMemo(
     () =>
-      markets.map((market) => {
-        const marketBets = bets.filter((bet) => bet.marketId === market.id);
-        const pendingBetCount = marketBets.filter(
-          (bet) => bet.status === "pending"
-        ).length;
-        const totalStake = marketBets.reduce((sum, bet) => sum + bet.stake, 0);
-        return {
-          id: market.id,
-          name: market.name,
-          status: market.status,
-          result: market.resultDecimal ?? "--",
-          totalBets: marketBets.length,
-          pendingBetCount,
-          totalStake,
-        };
-      }),
+      markets
+        .filter((m) => m && m.id)
+        .map((market) => {
+          const marketBets = bets.filter((bet) => bet && bet.marketId === market.id);
+          const pendingBetCount = marketBets.filter(
+            (bet) => bet?.status === "pending"
+          ).length;
+          const totalStake = marketBets.reduce((sum, bet) => {
+            const stake = Number(bet?.stake);
+            return sum + (Number.isFinite(stake) ? stake : 0);
+          }, 0);
+          return {
+            id: market.id,
+            name: market.name || "Unknown",
+            status: market.status || "settled",
+            result: market.resultDecimal ?? "--",
+            totalBets: marketBets.length,
+            pendingBetCount,
+            totalStake,
+          };
+        }),
     [bets, markets]
   );
 
@@ -1158,62 +1235,67 @@ function SettlementTab({
       { selection: string; totalStake: number; count: number }
     >();
     bets
-      .filter((bet) => bet.marketId === selectedMarket)
+      .filter((bet) => bet && bet.marketId === selectedMarket && bet.selection)
       .forEach((bet) => {
         const label =
           bet.mode === "double"
             ? `Double ${bet.selection}`
             : `${bet.splitSide ?? "Split"} ${bet.selection}`;
+        const stake = Number(bet?.stake);
+        const safeStake = Number.isFinite(stake) ? stake : 0;
         const current = map.get(label);
         if (current) {
-          current.totalStake += bet.stake;
+          current.totalStake += safeStake;
           current.count += 1;
         } else {
           map.set(label, {
             selection: label,
-            totalStake: bet.stake,
+            totalStake: safeStake,
             count: 1,
           });
         }
       });
     return Array.from(map.values())
-      .sort((a, b) => b.totalStake - a.totalStake)
+      .sort((a, b) => (b?.totalStake || 0) - (a?.totalStake || 0))
       .slice(0, 12);
   }, [bets, selectedMarket]);
 
-  // Selection totals keyed by market id (for the expandable rows)
+  // Selection totals keyed by market id
   const selectionTotalsByMarket = useMemo(() => {
     const map = new Map<
       MarketId,
       { selection: string; totalStake: number; count: number }[]
     >();
     markets.forEach((market) => {
+      if (!market || !market.id) return;
       const sel = new Map<
         string,
         { selection: string; totalStake: number; count: number }
       >();
       bets
-        .filter((b) => b.marketId === market.id)
+        .filter((b) => b && b.marketId === market.id && b.selection)
         .forEach((bet) => {
           const label =
             bet.mode === "double"
               ? `Double ${bet.selection}`
               : `${bet.splitSide ?? "Split"} ${bet.selection}`;
+          const stake = Number(bet?.stake);
+          const safeStake = Number.isFinite(stake) ? stake : 0;
           const cur = sel.get(label);
           if (cur) {
-            cur.totalStake += bet.stake;
+            cur.totalStake += safeStake;
             cur.count += 1;
           } else {
             sel.set(label, {
               selection: label,
-              totalStake: bet.stake,
+              totalStake: safeStake,
               count: 1,
             });
           }
         });
       map.set(
         market.id,
-        Array.from(sel.values()).sort((a, b) => b.totalStake - a.totalStake)
+        Array.from(sel.values()).sort((a, b) => (b?.totalStake || 0) - (a?.totalStake || 0))
       );
     });
     return map;
@@ -1238,11 +1320,14 @@ function SettlementTab({
               }
               className={`${inputClasses} focus:border-violet-300/60`}
             >
-              {markets.map((market) => (
-                <option key={market.id} value={market.id}>
-                  {market.name} {market.symbol}
-                </option>
-              ))}
+              {markets.map((market) => {
+                if (!market || !market.id) return null;
+                return (
+                  <option key={market.id} value={market.id}>
+                    {market.name || "Unknown"} {market.symbol || ""}
+                  </option>
+                );
+              })}
             </select>
           </label>
 
