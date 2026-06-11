@@ -359,6 +359,21 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
       ).sort((a, b) => b.totalStake - a.totalStake),
     [pendingBets],
   );
+  const singleNumberTotals = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; totalStake: number; count: number }>();
+    bets.forEach((bet) => {
+      const label = bet.mode === "double" ? `Double ${bet.selection}` : `${bet.splitSide} ${bet.selection}`;
+      const key = `${bet.marketName}|${label}`;
+      const current = map.get(key);
+      if (current) {
+        current.totalStake += bet.stake;
+        current.count += 1;
+      } else {
+        map.set(key, { key, label, totalStake: bet.stake, count: 1 });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalStake - a.totalStake).slice(0, 10);
+  }, [bets]);
   const exposureByMarket = useMemo(() => {
     const marketMap = new Map<string, { marketName: string; totals: Map<string, number>; totalStake: number; count: number }>();
     pendingBets.forEach((bet) => {
@@ -478,6 +493,35 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
                     <td className="py-3 pr-4 text-slate-300">{item.marketName}</td>
                     <td className="py-3 pr-4 text-slate-300">{item.mode === "double" ? "Double" : "Split"}</td>
                     <td className="py-3 pr-4 text-white font-semibold">{item.selection}</td>
+                    <td className="py-3 pr-4 font-mono text-cyan-100">{formatCredits(item.totalStake)}</td>
+                    <td className="py-3 text-slate-400">{item.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard>
+        <h3 className="text-xl font-bold">Top single-number totals</h3>
+        <p className="mt-2 text-sm text-slate-400">Shows the highest amount wagered on a single selection across all markets.</p>
+        {singleNumberTotals.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No bets placed yet.</p>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
+                  <th className="py-3 pr-4">Selection</th>
+                  <th className="py-3 pr-4">Total stake</th>
+                  <th className="py-3">Bets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {singleNumberTotals.map((item) => (
+                  <tr key={item.key} className="border-b border-white/5">
+                    <td className="py-3 pr-4 text-white font-semibold">{item.label}</td>
                     <td className="py-3 pr-4 font-mono text-cyan-100">{formatCredits(item.totalStake)}</td>
                     <td className="py-3 text-slate-400">{item.count}</td>
                   </tr>
@@ -645,6 +689,20 @@ function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMar
   );
 
   const selectedSummary = marketSummaries.find((summary) => summary.id === selectedMarket);
+  const selectionTotals = useMemo(() => {
+    const map = new Map<string, { selection: string; totalStake: number; count: number }>();
+    bets.filter((bet) => bet.marketId === selectedMarket).forEach((bet) => {
+      const label = bet.mode === "double" ? `Double ${bet.selection}` : `${bet.splitSide} ${bet.selection}`;
+      const current = map.get(label);
+      if (current) {
+        current.totalStake += bet.stake;
+        current.count += 1;
+      } else {
+        map.set(label, { selection: label, totalStake: bet.stake, count: 1 });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => b.totalStake - a.totalStake).slice(0, 12);
+  }, [bets, selectedMarket]);
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
@@ -707,6 +765,40 @@ function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMar
               </div>
             </div>
           ) : null}
+
+          <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-bold">Selected market number totals</h3>
+                <p className="mt-2 text-sm text-slate-400">Totals wagered on each selection for the chosen market.</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-slate-900/80 px-3 py-1 text-xs uppercase tracking-[0.18em] text-slate-300">Top {selectionTotals.length} selections</span>
+            </div>
+            {selectionTotals.length === 0 ? (
+              <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No bets placed for this market yet.</p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
+                      <th className="py-3 pr-4">Selection</th>
+                      <th className="py-3 pr-4">Total stake</th>
+                      <th className="py-3">Bets</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectionTotals.map((item) => (
+                      <tr key={item.selection} className="border-b border-white/5">
+                        <td className="py-3 pr-4 text-white font-semibold">{item.selection}</td>
+                        <td className="py-3 pr-4 font-mono text-cyan-100">{formatCredits(item.totalStake)}</td>
+                        <td className="py-3 text-slate-400">{item.count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       </SectionCard>
 
