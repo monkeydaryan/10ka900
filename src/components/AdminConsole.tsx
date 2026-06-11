@@ -38,26 +38,29 @@ import {
   inputClasses,
 } from "@/components/ui";
 
-// ─── Safe timeAgo wrapper ─────────────────────────────────────────────────────
+// ─── Safe helpers ─────────────────────────────────────────────────────────────
 
 function safeTimeAgo(date: Date | string | number | undefined | null): string {
   if (!date) return "Just now";
-
   try {
-    // If it's a number (timestamp), convert to date string
-    if (typeof date === "number") {
-      return timeAgo(new Date(date).toISOString());
-    }
-    // If it's a string, use directly
-    if (typeof date === "string") {
-      return timeAgo(date);
-    }
-    // If it's a Date object, convert to string
-    return timeAgo(date.toISOString());
+    if (typeof date === "number") return timeAgo(new Date(date).toISOString());
+    if (typeof date === "string") return timeAgo(date);
+    return timeAgo((date as Date).toISOString());
   } catch (e) {
     console.warn("Invalid date in timeAgo:", date, e);
     return "Just now";
   }
+}
+
+/** Safely convert any value to a finite number, returning 0 for bad input. */
+function safeNum(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Safely call formatCredits — never crashes even if value is undefined/null/NaN. */
+function safeCredits(value: unknown): string {
+  return formatCredits(safeNum(value));
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -118,17 +121,40 @@ export function AdminConsole({
 }) {
   const [tab, setTab] = useState<AdminTab>("overview");
 
-  // Safety: ensure arrays exist
-  const safeUsers = Array.isArray(users) ? users : [];
-  const safeBets = Array.isArray(bets) ? bets : [];
-  const safeDeposits = Array.isArray(deposits) ? deposits : [];
-  const safeWithdrawals = Array.isArray(withdrawals) ? withdrawals : [];
-  const safeTickets = Array.isArray(tickets) ? tickets : [];
-  const safeEvents = Array.isArray(events) ? events : [];
-  const safeMarkets = Array.isArray(markets) ? markets : [];
+  // Safety: ensure arrays are always arrays and filter out null/undefined items
+  const safeUsers = useMemo(
+    () => (Array.isArray(users) ? users.filter(Boolean) : []),
+    [users]
+  );
+  const safeBets = useMemo(
+    () => (Array.isArray(bets) ? bets.filter(Boolean) : []),
+    [bets]
+  );
+  const safeDeposits = useMemo(
+    () => (Array.isArray(deposits) ? deposits.filter(Boolean) : []),
+    [deposits]
+  );
+  const safeWithdrawals = useMemo(
+    () => (Array.isArray(withdrawals) ? withdrawals.filter(Boolean) : []),
+    [withdrawals]
+  );
+  const safeTickets = useMemo(
+    () => (Array.isArray(tickets) ? tickets.filter(Boolean) : []),
+    [tickets]
+  );
+  const safeEvents = useMemo(
+    () => (Array.isArray(events) ? events.filter(Boolean) : []),
+    [events]
+  );
+  const safeMarkets = useMemo(
+    () => (Array.isArray(markets) ? markets.filter(Boolean) : []),
+    [markets]
+  );
 
   const pendingDeposits = safeDeposits.filter((d) => d?.status === "pending");
-  const pendingWithdrawals = safeWithdrawals.filter((w) => w?.status === "pending");
+  const pendingWithdrawals = safeWithdrawals.filter(
+    (w) => w?.status === "pending"
+  );
   const openTickets = safeTickets.filter((t) => t?.status === "open");
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
@@ -217,7 +243,9 @@ export function AdminConsole({
             markets={safeMarkets}
           />
         )}
-        {tab === "users" && <UsersTab users={safeUsers} events={safeEvents} />}
+        {tab === "users" && (
+          <UsersTab users={safeUsers} events={safeEvents} />
+        )}
         {tab === "bets" && (
           <BetsTab bets={safeBets} onRejectBet={onRejectBet} />
         )}
@@ -304,8 +332,8 @@ function SecurityTab({
             admin) for 5 minutes.
           </li>
           <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
-            Registration requires OTP verification of phone before an account is
-            created.
+            Registration requires OTP verification of phone before an account
+            is created.
           </li>
           <li className="rounded-2xl border border-white/10 bg-slate-950/60 p-4">
             Admin session namespace is fully isolated from the player
@@ -348,44 +376,64 @@ function OverviewTab({
         .filter((m) => m && m.id)
         .map((market) => {
           const pendingBets = bets.filter(
-            (bet) => bet && bet.marketId === market.id && bet.status === "pending"
+            (bet) =>
+              bet &&
+              bet.marketId === market.id &&
+              bet.status === "pending"
           );
           return {
             id: market.id,
             name: market.name || "Unknown",
             status: market.status || "settled",
             pendingCount: pendingBets.length,
-            pendingStake: pendingBets.reduce((sum, bet) => {
-              const stake = Number(bet?.stake);
-              return sum + (Number.isFinite(stake) ? stake : 0);
-            }, 0),
+            pendingStake: pendingBets.reduce(
+              (sum, bet) => sum + safeNum(bet?.stake),
+              0
+            ),
           };
         })
-        .sort((a, b) => (b.pendingStake || 0) - (a.pendingStake || 0)),
+        .sort((a, b) => b.pendingStake - a.pendingStake),
     [markets, bets]
   );
 
   const openMarkets = markets.filter((m) => m?.status === "open").length;
   const lockedMarkets = markets.filter((m) => m?.status === "locked").length;
-  const settledMarkets = markets.filter((m) => m?.status === "settled").length;
+  const settledMarkets = markets.filter(
+    (m) => m?.status === "settled"
+  ).length;
 
-  const totalWalletBalance = users.reduce((sum, u) => {
-    const wallet = Number(u?.wallet);
-    return sum + (Number.isFinite(wallet) ? wallet : 0);
-  }, 0);
+  const totalWalletBalance = users.reduce(
+    (sum, u) => sum + safeNum(u?.wallet),
+    0
+  );
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       {/* Stats grid */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <InfoStrip label="Registered users" value={String(users?.length || 0)} />
-        <InfoStrip label="Total bets placed" value={String(bets?.length || 0)} />
-        <InfoStrip label="Pending deposits" value={String(deposits?.length || 0)} />
-        <InfoStrip label="Pending withdrawals" value={String(withdrawals?.length || 0)} />
-        <InfoStrip label="Open support tickets" value={String(tickets?.length || 0)} />
+        <InfoStrip
+          label="Registered users"
+          value={String(users?.length || 0)}
+        />
+        <InfoStrip
+          label="Total bets placed"
+          value={String(bets?.length || 0)}
+        />
+        <InfoStrip
+          label="Pending deposits"
+          value={String(deposits?.length || 0)}
+        />
+        <InfoStrip
+          label="Pending withdrawals"
+          value={String(withdrawals?.length || 0)}
+        />
+        <InfoStrip
+          label="Open support tickets"
+          value={String(tickets?.length || 0)}
+        />
         <InfoStrip
           label="Total balance in wallets"
-          value={formatCredits(totalWalletBalance)}
+          value={safeCredits(totalWalletBalance)}
         />
       </div>
 
@@ -404,7 +452,8 @@ function OverviewTab({
           <h2 className="text-xl font-bold">Market exposure snapshot</h2>
         </div>
         <p className="mt-2 text-sm text-slate-400">
-          Pending risk per market, including locked markets that have not yet settled.
+          Pending risk per market, including locked markets that have not yet
+          settled.
         </p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -430,7 +479,7 @@ function OverviewTab({
                     {summary.pendingCount}
                   </td>
                   <td className="py-3 font-mono text-cyan-100">
-                    {formatCredits(summary.pendingStake)}
+                    {safeCredits(summary.pendingStake)}
                   </td>
                 </tr>
               ))}
@@ -465,12 +514,16 @@ function OverviewTab({
                   className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-bold text-white">{event?.title || "Unknown Event"}</p>
+                    <p className="font-bold text-white">
+                      {event?.title || "Unknown Event"}
+                    </p>
                     <span className="shrink-0 text-xs text-slate-500">
                       {safeTimeAgo(event?.at)}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-400">{event?.detail || "No details"}</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {event?.detail || "No details"}
+                  </p>
                 </div>
               );
             })
@@ -491,7 +544,8 @@ function UsersTab({
   events: ActivityEvent[];
 }) {
   const authEvents = events.filter(
-    (event) => event?.type === "registration" || event?.type === "login"
+    (event) =>
+      event?.type === "registration" || event?.type === "login"
   );
 
   return (
@@ -527,7 +581,7 @@ function UsersTab({
                       {user.phone || "—"}
                     </td>
                     <td className="py-3 pr-4 font-mono text-slate-300">
-                      {formatCredits(Number(user?.wallet) || 0)}
+                      {safeCredits(user?.wallet)}
                     </td>
                     <td className="py-3 text-slate-400">
                       {safeTimeAgo(user?.createdAt)}
@@ -546,7 +600,9 @@ function UsersTab({
       </SectionCard>
 
       <SectionCard>
-        <h2 className="text-xl font-bold">Login &amp; registration stream</h2>
+        <h2 className="text-xl font-bold">
+          Login &amp; registration stream
+        </h2>
         <p className="mt-1 text-sm text-slate-400">
           Each event is also forwarded to the platform operations team.
         </p>
@@ -564,12 +620,16 @@ function UsersTab({
                   className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="font-bold text-white">{event.title || "Unknown"}</p>
+                    <p className="font-bold text-white">
+                      {event.title || "Unknown"}
+                    </p>
                     <span className="shrink-0 text-xs text-slate-500">
                       {safeTimeAgo(event?.at)}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-400">{event.detail || "No details"}</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    {event.detail || "No details"}
+                  </p>
                 </div>
               );
             })
@@ -589,12 +649,28 @@ function BetsTab({
   bets: Bet[];
   onRejectBet: (betId: string) => void;
 }) {
-  const pendingBets = bets.filter((bet) => bet?.status === "pending");
-  const totalBetsPlaced = bets.length;
-  const totalStakePlaced = bets.reduce((sum, bet) => {
-    const stake = Number(bet?.stake);
-    return sum + (Number.isFinite(stake) ? stake : 0);
-  }, 0);
+  // Filter out any bets missing critical fields
+  const validBets = useMemo(
+    () =>
+      bets.filter(
+        (bet) => bet && bet.id && bet.marketId && bet.userId
+      ),
+    [bets]
+  );
+
+  const pendingBets = validBets.filter((bet) => bet?.status === "pending");
+
+  const totalBetsPlaced = validBets.length;
+
+  const totalStakePlaced = useMemo(
+    () => validBets.reduce((sum, bet) => sum + safeNum(bet?.stake), 0),
+    [validBets]
+  );
+
+  const totalPendingStake = useMemo(
+    () => pendingBets.reduce((sum, bet) => sum + safeNum(bet?.stake), 0),
+    [pendingBets]
+  );
 
   // Exposure grouped by market + mode + selection
   const exposure = useMemo(
@@ -603,9 +679,8 @@ function BetsTab({
         pendingBets.reduce(
           (map, bet) => {
             if (!bet || !bet.marketName || !bet.selection) return map;
-            const key = `${bet.marketName}|${bet.mode}|${bet.selection}`;
-            const stake = Number(bet.stake);
-            const safeStake = Number.isFinite(stake) ? stake : 0;
+            const key = `${bet.marketName}|${bet.mode ?? "unknown"}|${bet.selection}`;
+            const safeStake = safeNum(bet.stake);
             const current = map.get(key);
             if (current) {
               current.totalStake += safeStake;
@@ -614,7 +689,7 @@ function BetsTab({
               map.set(key, {
                 key,
                 marketName: bet.marketName,
-                mode: bet.mode,
+                mode: (bet.mode ?? "double") as BetMode,
                 selection: bet.selection,
                 totalStake: safeStake,
                 count: 1,
@@ -634,7 +709,9 @@ function BetsTab({
             }
           >()
         )
-      ).sort((a, b) => (b[1]?.totalStake || 0) - (a[1]?.totalStake || 0)).map(([, v]) => v),
+      )
+        .sort((a, b) => b[1].totalStake - a[1].totalStake)
+        .map(([, v]) => v),
     [pendingBets]
   );
 
@@ -644,15 +721,14 @@ function BetsTab({
       string,
       { key: string; label: string; totalStake: number; count: number }
     >();
-    bets.forEach((bet) => {
+    validBets.forEach((bet) => {
       if (!bet || !bet.marketName || !bet.selection) return;
       const label =
         bet.mode === "double"
           ? `Double ${bet.selection}`
           : `${bet.splitSide ?? "Split"} ${bet.selection}`;
       const key = `${bet.marketName}|${label}`;
-      const stake = Number(bet.stake);
-      const safeStake = Number.isFinite(stake) ? stake : 0;
+      const safeStake = safeNum(bet.stake);
       const current = map.get(key);
       if (current) {
         current.totalStake += safeStake;
@@ -662,9 +738,9 @@ function BetsTab({
       }
     });
     return Array.from(map.values())
-      .sort((a, b) => (b?.totalStake || 0) - (a?.totalStake || 0))
+      .sort((a, b) => b.totalStake - a.totalStake)
       .slice(0, 10);
-  }, [bets]);
+  }, [validBets]);
 
   // Per-market bar chart data
   const exposureByMarket = useMemo(() => {
@@ -679,8 +755,7 @@ function BetsTab({
     >();
     pendingBets.forEach((bet) => {
       if (!bet || !bet.marketId || !bet.selection) return;
-      const stake = Number(bet.stake);
-      const safeStake = Number.isFinite(stake) ? stake : 0;
+      const safeStake = safeNum(bet.stake);
       const existing = marketMap.get(bet.marketId);
       if (existing) {
         existing.totals.set(
@@ -703,17 +778,12 @@ function BetsTab({
       return {
         ...item,
         selections: Array.from(item.totals.entries()).sort(
-          (a, b) => (b[1] || 0) - (a[1] || 0)
+          (a, b) => b[1] - a[1]
         ),
         maxStake,
       };
     });
   }, [pendingBets]);
-
-  const totalPendingStake = pendingBets.reduce((sum, bet) => {
-    const stake = Number(bet?.stake);
-    return sum + (Number.isFinite(stake) ? stake : 0);
-  }, 0);
 
   return (
     <div className="space-y-5">
@@ -746,7 +816,7 @@ function BetsTab({
             Total stake placed
           </p>
           <p className="mt-3 font-mono text-3xl font-black text-white">
-            {formatCredits(totalStakePlaced)}
+            {safeCredits(totalStakePlaced)}
           </p>
           <p className="mt-2 text-sm text-slate-400">
             Total credits wagered across all bets.
@@ -757,7 +827,7 @@ function BetsTab({
             Pending exposure
           </p>
           <p className="mt-3 font-mono text-3xl font-black text-white">
-            {formatCredits(totalPendingStake)}
+            {safeCredits(totalPendingStake)}
           </p>
           <p className="mt-2 text-sm text-slate-400">
             Total amount currently at risk across all pending bets.
@@ -796,7 +866,7 @@ function BetsTab({
                     {market.marketName}
                   </p>
                   <p className="text-sm text-slate-400">
-                    {formatCredits(market.maxStake)} top stake
+                    {safeCredits(market.maxStake)} top stake
                   </p>
                 </div>
                 <div className="mt-4 space-y-3">
@@ -804,7 +874,7 @@ function BetsTab({
                     <div key={selection}>
                       <div className="flex items-center justify-between text-sm text-slate-300">
                         <span>{selection}</span>
-                        <span>{formatCredits(amount)}</span>
+                        <span>{safeCredits(amount)}</span>
                       </div>
                       <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-900">
                         <div
@@ -812,7 +882,7 @@ function BetsTab({
                           style={{
                             width: `${Math.max(
                               6,
-                              (amount / market.maxStake) * 100
+                              (safeNum(amount) / market.maxStake) * 100
                             )}%`,
                           }}
                         />
@@ -862,7 +932,7 @@ function BetsTab({
                       {item.selection}
                     </td>
                     <td className="py-3 pr-4 font-mono text-cyan-100">
-                      {formatCredits(item.totalStake)}
+                      {safeCredits(item.totalStake)}
                     </td>
                     <td className="py-3 text-slate-400">{item.count}</td>
                   </tr>
@@ -901,7 +971,7 @@ function BetsTab({
                       {item.label}
                     </td>
                     <td className="py-3 pr-4 font-mono text-cyan-100">
-                      {formatCredits(item.totalStake)}
+                      {safeCredits(item.totalStake)}
                     </td>
                     <td className="py-3 text-slate-400">{item.count}</td>
                   </tr>
@@ -931,16 +1001,24 @@ function BetsTab({
                   <div>
                     <p className="font-bold text-white">
                       {bet.marketName || "Unknown"} ·{" "}
-                      {bet.mode === "double" ? "Double" : (bet.splitSide || "Split")}{" "}
-                      {bet.selection}
+                      {bet.mode === "double"
+                        ? "Double"
+                        : bet.splitSide || "Split"}{" "}
+                      {bet.selection || "?"}
                     </p>
                     <p className="mt-1 text-sm text-slate-300">
-                      {bet.userName || "Unknown"} · {bet.userId} · stake{" "}
-                      {formatCredits(Number(bet.stake) || 0)}
+                      {bet.userName || "Unknown"} · {bet.userId || "N/A"} ·
+                      stake {safeCredits(bet.stake)}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Potential:{" "}
+                      <span className="font-mono text-cyan-100">
+                        {safeCredits(bet.potentialReturn)}
+                      </span>{" "}
+                      · Placed: {safeTimeAgo(bet.placedAt)}
                     </p>
                     <p className="mt-1 text-sm uppercase tracking-[0.18em] text-slate-400">
-                      Status:{" "}
-                      {bet.status === "refunded" ? "Refunded" : bet.status}
+                      Status: {bet.status || "pending"}
                     </p>
                   </div>
                   <div className="flex flex-col gap-2 sm:items-end">
@@ -999,9 +1077,18 @@ function DepositsTab({
                     label: "User",
                     value: `${deposit.userName || "Unknown"} · ${deposit.userId || "N/A"}`,
                   },
-                  { label: "Transaction ID", value: deposit.transactionId || "N/A" },
-                  { label: "Amount", value: formatCredits(Number(deposit?.amount) || 0) },
-                  { label: "Submitted", value: safeTimeAgo(deposit?.createdAt) },
+                  {
+                    label: "Transaction ID",
+                    value: deposit.transactionId || "N/A",
+                  },
+                  {
+                    label: "Amount",
+                    value: safeCredits(deposit?.amount),
+                  },
+                  {
+                    label: "Submitted",
+                    value: safeTimeAgo(deposit?.createdAt),
+                  },
                 ]}
                 onApprove={
                   deposit.status === "pending"
@@ -1041,8 +1128,8 @@ function WithdrawalsTab({
         <h2 className="text-xl font-bold">Withdrawal verification</h2>
       </div>
       <p className="mt-1 text-sm text-slate-400">
-        The amount is already on hold from the user's wallet balance. Approve to
-        initiate the bank payout, or reject to refund the hold.
+        The amount is already on hold from the user's wallet balance. Approve
+        to initiate the bank payout, or reject to refund the hold.
       </p>
       <div className="mt-4 space-y-3">
         {withdrawals.length === 0 ? (
@@ -1063,7 +1150,7 @@ function WithdrawalsTab({
                   },
                   {
                     label: "Amount",
-                    value: formatCredits(Number(withdrawal?.amount) || 0),
+                    value: safeCredits(withdrawal?.amount),
                   },
                   {
                     label: "Bank",
@@ -1129,16 +1216,23 @@ function SupportTab({
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-bold text-white">{ticket.topic || "Unknown"}</p>
+                  <p className="font-bold text-white">
+                    {ticket.topic || "Unknown"}
+                  </p>
                   <StatusBadge
                     label={ticket.status || "open"}
-                    classes={getRequestStatusClasses(ticket.status || "open")}
+                    classes={getRequestStatusClasses(
+                      ticket.status || "open"
+                    )}
                   />
                 </div>
                 <p className="mt-1 font-mono text-xs text-cyan-200">
-                  {ticket.userName || "Unknown"} · {ticket.userId || "N/A"}
+                  {ticket.userName || "Unknown"} ·{" "}
+                  {ticket.userId || "N/A"}
                 </p>
-                <p className="mt-2 text-sm text-slate-300">{ticket.message || "No message"}</p>
+                <p className="mt-2 text-sm text-slate-300">
+                  {ticket.message || "No message"}
+                </p>
                 {ticket.transactionId && (
                   <p className="mt-2 font-mono text-sm text-cyan-100">
                     TX: {ticket.transactionId}
@@ -1147,7 +1241,7 @@ function SupportTab({
                 {ticket.screenshot && (
                   <img
                     src={ticket.screenshot}
-                    alt={`Payment screenshot from ${ticket.userId}`}
+                    alt={`Payment screenshot from ${ticket.userId || "user"}`}
                     className="mt-3 max-h-56 rounded-xl border border-white/10 object-contain"
                   />
                 )}
@@ -1203,14 +1297,16 @@ function SettlementTab({
       markets
         .filter((m) => m && m.id)
         .map((market) => {
-          const marketBets = bets.filter((bet) => bet && bet.marketId === market.id);
+          const marketBets = bets.filter(
+            (bet) => bet && bet.marketId === market.id
+          );
           const pendingBetCount = marketBets.filter(
             (bet) => bet?.status === "pending"
           ).length;
-          const totalStake = marketBets.reduce((sum, bet) => {
-            const stake = Number(bet?.stake);
-            return sum + (Number.isFinite(stake) ? stake : 0);
-          }, 0);
+          const totalStake = marketBets.reduce(
+            (sum, bet) => sum + safeNum(bet?.stake),
+            0
+          );
           return {
             id: market.id,
             name: market.name || "Unknown",
@@ -1235,14 +1331,16 @@ function SettlementTab({
       { selection: string; totalStake: number; count: number }
     >();
     bets
-      .filter((bet) => bet && bet.marketId === selectedMarket && bet.selection)
+      .filter(
+        (bet) =>
+          bet && bet.marketId === selectedMarket && bet.selection
+      )
       .forEach((bet) => {
         const label =
           bet.mode === "double"
             ? `Double ${bet.selection}`
             : `${bet.splitSide ?? "Split"} ${bet.selection}`;
-        const stake = Number(bet?.stake);
-        const safeStake = Number.isFinite(stake) ? stake : 0;
+        const safeStake = safeNum(bet?.stake);
         const current = map.get(label);
         if (current) {
           current.totalStake += safeStake;
@@ -1256,7 +1354,7 @@ function SettlementTab({
         }
       });
     return Array.from(map.values())
-      .sort((a, b) => (b?.totalStake || 0) - (a?.totalStake || 0))
+      .sort((a, b) => b.totalStake - a.totalStake)
       .slice(0, 12);
   }, [bets, selectedMarket]);
 
@@ -1279,8 +1377,7 @@ function SettlementTab({
             bet.mode === "double"
               ? `Double ${bet.selection}`
               : `${bet.splitSide ?? "Split"} ${bet.selection}`;
-          const stake = Number(bet?.stake);
-          const safeStake = Number.isFinite(stake) ? stake : 0;
+          const safeStake = safeNum(bet?.stake);
           const cur = sel.get(label);
           if (cur) {
             cur.totalStake += safeStake;
@@ -1295,7 +1392,9 @@ function SettlementTab({
         });
       map.set(
         market.id,
-        Array.from(sel.values()).sort((a, b) => (b?.totalStake || 0) - (a?.totalStake || 0))
+        Array.from(sel.values()).sort(
+          (a, b) => b.totalStake - a.totalStake
+        )
       );
     });
     return map;
@@ -1339,7 +1438,9 @@ function SettlementTab({
               value={resultDigits}
               maxLength={2}
               onChange={(e) =>
-                setResultDigits(e.target.value.replace(/\D/g, "").slice(0, 2))
+                setResultDigits(
+                  e.target.value.replace(/\D/g, "").slice(0, 2)
+                )
               }
               className={`${inputClasses} font-mono text-3xl font-black text-cyan-100 focus:border-violet-300/60`}
             />
@@ -1372,13 +1473,15 @@ function SettlementTab({
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-400">
-            Manual close locks betting immediately; pending stakes are refunded
-            to users. Reopen the market to allow new bets again.
+            Manual close locks betting immediately; pending stakes are
+            refunded to users. Reopen the market to allow new bets again.
           </p>
 
           {selectedSummary && (
             <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/70 p-4">
-              <h3 className="text-lg font-bold">Selected market summary</h3>
+              <h3 className="text-lg font-bold">
+                Selected market summary
+              </h3>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
@@ -1401,7 +1504,7 @@ function SettlementTab({
                     Total stake
                   </p>
                   <p className="mt-2 text-3xl font-black text-cyan-100">
-                    {formatCredits(selectedSummary.totalStake)}
+                    {safeCredits(selectedSummary.totalStake)}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
@@ -1454,9 +1557,11 @@ function SettlementTab({
                           {item.selection}
                         </td>
                         <td className="py-3 pr-4 font-mono text-cyan-100">
-                          {formatCredits(item.totalStake)}
+                          {safeCredits(item.totalStake)}
                         </td>
-                        <td className="py-3 text-slate-400">{item.count}</td>
+                        <td className="py-3 text-slate-400">
+                          {item.count}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1506,7 +1611,7 @@ function SettlementTab({
                       {summary.pendingBetCount}
                     </td>
                     <td className="py-3 pr-4 font-mono text-cyan-100">
-                      {formatCredits(summary.totalStake)}
+                      {safeCredits(summary.totalStake)}
                     </td>
                     <td className="py-3">
                       <button
@@ -1539,7 +1644,8 @@ function SettlementTab({
                             </thead>
                             <tbody>
                               {(
-                                selectionTotalsByMarket.get(summary.id) ?? []
+                                selectionTotalsByMarket.get(summary.id) ??
+                                []
                               )
                                 .slice(0, 30)
                                 .map((s) => (
@@ -1551,7 +1657,7 @@ function SettlementTab({
                                       {s.selection}
                                     </td>
                                     <td className="py-3 pr-4 font-mono text-cyan-100">
-                                      {formatCredits(s.totalStake)}
+                                      {safeCredits(s.totalStake)}
                                     </td>
                                     <td className="py-3 text-slate-400">
                                       {s.count}
@@ -1575,30 +1681,30 @@ function SettlementTab({
       <SectionCard>
         <h3 className="text-xl font-bold">Integrity checklist</h3>
         <ChecklistItem>
-          Double-digit winners pay 90× (max {MAX_DOUBLE_BET} stake per number);
-          Andar/Bahar pays 9× — settled atomically per market.
+          Double-digit winners pay 90× (max {MAX_DOUBLE_BET} stake per
+          number); Andar/Bahar pays 9× — settled atomically per market.
         </ChecklistItem>
         <ChecklistItem>
           Deposits below {MIN_DEPOSIT} credits and withdrawals below{" "}
           {MIN_WITHDRAW} credits are rejected client- and server-side.
         </ChecklistItem>
         <ChecklistItem>
-          Betting cutoffs: Taiwan 10:53 AM · KOSPI 11:53 AM · Hang Seng 1:32
-          PM · SENSEX 3:23 PM · DAX 8:55 PM · Dow Jones 12:00 AM.
+          Betting cutoffs: Taiwan 10:53 AM · KOSPI 11:53 AM · Hang Seng
+          1:32 PM · SENSEX 3:23 PM · DAX 8:55 PM · Dow Jones 12:00 AM.
         </ChecklistItem>
         <ChecklistItem>
           Duplicate transaction IDs cannot be submitted twice.
         </ChecklistItem>
         <ChecklistItem>
-          Withdrawal amounts are held immediately to prevent double spending;
-          rejects refund instantly.
+          Withdrawal amounts are held immediately to prevent double
+          spending; rejects refund instantly.
         </ChecklistItem>
         <ChecklistItem>
           Manual market lock refunds all pending bets to user wallets.
         </ChecklistItem>
         <ChecklistItem>
-          Registrations and logins are OTP verified and reported to platform
-          operations.
+          Registrations and logins are OTP verified and reported to
+          platform operations.
         </ChecklistItem>
         <ChecklistItem>
           Admin session is fully isolated from the player application.

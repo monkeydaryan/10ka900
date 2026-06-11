@@ -201,7 +201,7 @@ export const initialMarkets: Market[] = [
     resultDecimal: "66",
     change: -0.09,
     history: ["85", "11", "39", "50", "66"],
-    cutoffMinutes: 24 * 60, // 12:00 AM — open until midnight
+    cutoffMinutes: 24 * 60,
     cutoffLabel: "12:00 AM",
   },
 ];
@@ -213,7 +213,8 @@ export const createUserId = () =>
   `M90-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase().padStart(7, "0")}`;
 
 /** Minutes since local midnight for a given date. */
-export const minutesOfDay = (date: Date) => date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
+export const minutesOfDay = (date: Date) =>
+  date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 
 /** Betting is allowed only before the market's cutoff time and while the market is open. */
 export const isBettingOpen = (market: Market, now: Date) =>
@@ -221,7 +222,9 @@ export const isBettingOpen = (market: Market, now: Date) =>
 
 /** Time remaining until the market's betting cutoff, formatted hh:mm:ss. Empty when passed. */
 export const timeUntilCutoff = (market: Market, now: Date) => {
-  const remainingSeconds = Math.floor((market.cutoffMinutes - minutesOfDay(now)) * 60);
+  const remainingSeconds = Math.floor(
+    (market.cutoffMinutes - minutesOfDay(now)) * 60
+  );
   if (remainingSeconds <= 0) return "";
   const h = Math.floor(remainingSeconds / 3600);
   const m = Math.floor((remainingSeconds % 3600) / 60);
@@ -229,9 +232,18 @@ export const timeUntilCutoff = (market: Market, now: Date) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
-export const formatCredits = (value: number) => `${value.toLocaleString("en-US")} CR`;
+// ─── THE FIX ──────────────────────────────────────────────────────────────────
+// Before: value.toLocaleString() → crashes when value is undefined/null/NaN
+// After:  always coerce to a safe finite number first
+export const formatCredits = (value: number | undefined | null): string => {
+  // Coerce to number, replace any non-finite result (NaN, Infinity) with 0
+  const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+  return `${safeValue.toLocaleString("en-US")} CR`;
+};
+// ─────────────────────────────────────────────────────────────────────────────
 
-export const generateOtp = () => String(Math.floor(100000 + Math.random() * 900000));
+export const generateOtp = () =>
+  String(Math.floor(100000 + Math.random() * 900000));
 
 /* ------------------------------------------------------------------ */
 /* Password security (Web Crypto API — no plaintext ever stored)       */
@@ -242,7 +254,10 @@ export const createSalt = () =>
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("");
 
-export const hashPassword = async (password: string, salt: string): Promise<string> => {
+export const hashPassword = async (
+  password: string,
+  salt: string
+): Promise<string> => {
   const data = new TextEncoder().encode(`${salt}:${password}`);
   const digest = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(digest))
@@ -265,24 +280,38 @@ export const LOCKOUT_MINUTES = 5;
 export const DEFAULT_ADMIN_PASSWORD = "ChangeMe123!";
 
 export const timeAgo = (iso: string) => {
-  const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+  // Guard against invalid input
+  if (!iso) return "just now";
+  const date = new Date(iso);
+  if (isNaN(date.getTime())) return "just now";
+
+  const seconds = Math.max(
+    0,
+    Math.floor((Date.now() - date.getTime()) / 1000)
+  );
   if (seconds < 10) return "just now";
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h ago`;
-  return new Date(iso).toLocaleString();
+  return date.toLocaleString();
 };
 
 export const getMarketStatusClasses = (status: MarketState) => {
-  if (status === "open") return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
-  if (status === "locked") return "border-amber-400/40 bg-amber-400/10 text-amber-200";
+  if (status === "open")
+    return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
+  if (status === "locked")
+    return "border-amber-400/40 bg-amber-400/10 text-amber-200";
   return "border-sky-400/40 bg-sky-400/10 text-sky-200";
 };
 
-export const getRequestStatusClasses = (status: RequestStatus | TicketStatus) => {
-  if (status === "approved" || status === "resolved") return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
-  if (status === "rejected") return "border-red-400/40 bg-red-400/10 text-red-200";
+export const getRequestStatusClasses = (
+  status: RequestStatus | TicketStatus
+) => {
+  if (status === "approved" || status === "resolved")
+    return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
+  if (status === "rejected")
+    return "border-red-400/40 bg-red-400/10 text-red-200";
   return "border-amber-400/40 bg-amber-400/10 text-amber-200";
 };
