@@ -275,7 +275,7 @@ function MarketPanel({
   const bettingOpen = isBettingOpen(market, now);
   const countdown = timeUntilCutoff(market, now);
 
-  // FIX: Safely handle undefined market data
+  // CRITICAL: Safe data extraction with NO .toLocaleString() calls
   const lastPrice = Number(market?.lastPrice) || 0;
   const change = Number(market?.change) || 0;
   const resultDecimal = market?.resultDecimal || "--";
@@ -287,6 +287,26 @@ function MarketPanel({
       </SectionCard>
     );
   }
+
+  // Format values safely FIRST, then use them
+  const formattedLastPrice = (() => {
+    if (!Number.isFinite(lastPrice) || lastPrice <= 0) return "N/A";
+    try {
+      return lastPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } catch {
+      return lastPrice.toFixed(2);
+    }
+  })();
+
+  const formattedChange = (() => {
+    if (!Number.isFinite(change)) return "N/A";
+    return `${change > 0 ? "+" : ""}${change.toFixed(2)}%`;
+  })();
+
+  const changeTone = (() => {
+    if (!Number.isFinite(change)) return "neutral";
+    return change >= 0 ? "good" : "bad";
+  })();
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
@@ -332,16 +352,8 @@ function MarketPanel({
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            {/* FIX: Safe fallback for undefined lastPrice */}
-            <TickerMetric
-              label="Last close"
-              value={lastPrice > 0 ? lastPrice.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "N/A"}
-            />
-            <TickerMetric
-              label="Change"
-              value={`${change > 0 ? "+" : ""}${change.toFixed(2)}%`}
-              tone={change >= 0 ? "good" : "bad"}
-            />
+            <TickerMetric label="Last close" value={formattedLastPrice} />
+            <TickerMetric label="Change" value={formattedChange} tone={changeTone} />
             <TickerMetric label="Winning digits" value={`.${resultDecimal}`} tone="accent" />
           </div>
 
