@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, Fragment } from "react";
 import type { ReactNode } from "react";
 import { Banknote, Headset, KeyRound, Landmark, ListChecks, Radio, Users } from "lucide-react";
 import {
@@ -83,8 +83,8 @@ export function AdminConsole({
 
   return (
     <main className="min-h-screen bg-[#070511] px-4 py-5 text-white sm:px-6 lg:px-8">
-      <div className="grid-bg fixed inset-0 opacity-40" />
-      <div className="relative mx-auto max-w-[1450px]">
+      <div className="grid-bg fixed inset-0 opacity-40 -z-10 pointer-events-none" />
+      <div className="relative z-10 mx-auto max-w-[1450px]">
         <header className="mb-6 flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -840,7 +840,8 @@ function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMar
             </thead>
             <tbody>
               {marketSummaries.map((summary) => (
-                <tr key={summary.id} className="border-b border-white/5">
+                <Fragment key={summary.id}>
+                <tr className="border-b border-white/5">
                   <td className="py-3 pr-4 text-slate-300">{summary.name}</td>
                   <td className="py-3 pr-4"><StatusBadge label={summary.status} classes={getMarketStatusClasses(summary.status)} /></td>
                   <td className="py-3 pr-4 font-semibold text-white">{summary.totalBets}</td>
@@ -881,6 +882,7 @@ function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMar
                     </td>
                   </tr>
                 )}
+                </Fragment>
               ))}
             </tbody>
           </table>

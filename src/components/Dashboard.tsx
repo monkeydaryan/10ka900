@@ -103,8 +103,8 @@ export function Dashboard({
 
   return (
     <main className="min-h-screen bg-[#050813] text-white">
-      <div className="grid-bg fixed inset-0 opacity-50" />
-      <div className="relative mx-auto max-w-[1500px] px-4 py-4 sm:px-6 lg:px-8">
+      <div className="grid-bg fixed inset-0 opacity-50 -z-10 pointer-events-none" />
+      <div className="relative z-10 mx-auto max-w-[1500px] px-4 py-4 sm:px-6 lg:px-8">
         <header className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 xl:flex-row xl:items-center xl:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.5em] text-cyan-200/70">{BRAND} terminal</p>
