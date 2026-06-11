@@ -232,17 +232,22 @@ function MarketPanel({
 
   // Memoize derived data so we don't re-filter on every clock tick
   const { marketBets, pendingMarketBets, marketPendingStake } = useMemo(() => {
-    const mBets = bets.filter((bet) => bet.marketId === market.id);
-    const pending = mBets.filter((bet) => bet.status === "pending");
+    const mBets = bets.filter((bet) => bet?.marketId === market.id);
+    const pending = mBets.filter((bet) => bet?.status === "pending");
     return {
       marketBets: mBets,
       pendingMarketBets: pending,
-      marketPendingStake: pending.reduce((sum, bet) => sum + bet.stake, 0),
+      marketPendingStake: pending.reduce((sum, bet) => sum + (Number(bet?.stake) || 0), 0),
     };
   }, [bets, market.id]);
 
   const bettingOpen = isBettingOpen(market, now);
   const countdown = timeUntilCutoff(market, now);
+
+  // FIX: Safely handle undefined market data
+  const lastPrice = Number(market?.lastPrice) || 0;
+  const change = Number(market?.change) || 0;
+  const resultDecimal = market?.resultDecimal || "--";
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
@@ -250,15 +255,15 @@ function MarketPanel({
         <SectionCard>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-sm uppercase tracking-[0.36em] text-cyan-200/80">{market.symbol}</p>
-              <h2 className="mt-2 text-4xl font-black tracking-[-0.07em] text-white">{market.name}</h2>
+              <p className="text-sm uppercase tracking-[0.36em] text-cyan-200/80">{market?.symbol || "N/A"}</p>
+              <h2 className="mt-2 text-4xl font-black tracking-[-0.07em] text-white">{market?.name || "Unknown Market"}</h2>
               <p className="mt-2 text-sm text-slate-400">
-                {market.country} close: {market.closeTime} {market.timezone}
+                {market?.country || "Unknown"} close: {market?.closeTime || "N/A"} {market?.timezone || ""}
               </p>
             </div>
             <StatusBadge
-              label={market.status === "open" ? "betting open" : market.status === "locked" ? "locked by admin" : "settled"}
-              classes={getMarketStatusClasses(market.status)}
+              label={market?.status === "open" ? "betting open" : market?.status === "locked" ? "locked by admin" : "settled"}
+              classes={getMarketStatusClasses(market?.status || "settled")}
             />
           </div>
 
@@ -275,22 +280,30 @@ function MarketPanel({
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Betting closes at</p>
-              <p className="mt-1 font-mono text-2xl font-black text-amber-200">{market.cutoffLabel}</p>
+              <p className="mt-1 font-mono text-2xl font-black text-amber-200">{market?.cutoffLabel || "N/A"}</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
-                {market.status === "locked" ? "Admin lock" : bettingOpen ? "Time left to bet" : "Status"}
+                {market?.status === "locked" ? "Admin lock" : bettingOpen ? "Time left to bet" : "Status"}
               </p>
-              <p className={`mt-1 font-mono text-2xl font-black ${market.status === "open" ? "text-emerald-200" : "text-red-200"}`}>
-                {market.status === "locked" ? "LOCKED" : bettingOpen ? countdown : "CLOSED"}
+              <p className={`mt-1 font-mono text-2xl font-black ${market?.status === "open" ? "text-emerald-200" : "text-red-200"}`}>
+                {market?.status === "locked" ? "LOCKED" : bettingOpen ? countdown : "CLOSED"}
               </p>
             </div>
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <TickerMetric label="Last close" value={market.lastPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })} />
-            <TickerMetric label="Change" value={`${market.change > 0 ? "+" : ""}${market.change}%`} tone={market.change >= 0 ? "good" : "bad"} />
-            <TickerMetric label="Winning digits" value={`.${market.resultDecimal}`} tone="accent" />
+            {/* FIX: Safe fallback for undefined lastPrice */}
+            <TickerMetric
+              label="Last close"
+              value={lastPrice > 0 ? lastPrice.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "N/A"}
+            />
+            <TickerMetric
+              label="Change"
+              value={`${change > 0 ? "+" : ""}${change}%`}
+              tone={change >= 0 ? "good" : "bad"}
+            />
+            <TickerMetric label="Winning digits" value={`.${resultDecimal}`} tone="accent" />
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -301,25 +314,31 @@ function MarketPanel({
           <div className="mt-8">
             <p className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">Historical closing decimals</p>
             <div className="flex flex-wrap gap-2">
-              {market.history.map((digit, index) => (
-                <span
-                  key={`${digit}-${index}`}
-                  className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 font-mono text-lg font-black text-cyan-100"
-                >
-                  .{digit}
-                </span>
-              ))}
+              {market?.history && market.history.length > 0 ? (
+                market.history.map((digit, index) => (
+                  <span
+                    key={`${digit}-${index}`}
+                    className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 font-mono text-lg font-black text-cyan-100"
+                  >
+                    .{digit}
+                  </span>
+                ))
+              ) : (
+                <p className="text-sm text-slate-400">No history available</p>
+              )}
             </div>
           </div>
 
-          <a
-            href={market.source}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-6 inline-flex text-sm text-cyan-200 underline-offset-4 hover:underline"
-          >
-            Yahoo Finance source endpoint
-          </a>
+          {market?.source && (
+            <a
+              href={market.source}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-6 inline-flex text-sm text-cyan-200 underline-offset-4 hover:underline"
+            >
+              Yahoo Finance source endpoint
+            </a>
+          )}
         </SectionCard>
 
         <SectionCard>
@@ -330,7 +349,10 @@ function MarketPanel({
                 No bets placed on this market yet.
               </p>
             ) : (
-              marketBets.slice(0, 4).map((bet) => <BetRow key={bet.id} bet={bet} />)
+              marketBets.slice(0, 4).map((bet) => {
+                if (!bet) return null; // FIX: Skip undefined bets
+                return <BetRow key={bet.id} bet={bet} />;
+              })
             )}
           </div>
         </SectionCard>
@@ -346,6 +368,7 @@ function TickerMetric({ label, value, tone = "neutral" }: { label: string; value
   return (
     <div className="rounded-3xl border border-white/10 bg-slate-950/60 p-4">
       <p className="text-xs uppercase tracking-[0.24em] text-slate-500">{label}</p>
+      {/* FIX: Safely render value - if it's "N/A", it won't try to call toLocaleString */}
       <p className={`mt-2 font-mono text-2xl font-black ${toneClass}`}>{value}</p>
     </div>
   );

@@ -313,47 +313,39 @@ function OverviewTab({
   const marketSummaries = useMemo(
     () =>
       markets
+        .filter((m) => m) // FIX: Filter out undefined markets
         .map((market) => {
           const pendingBets = bets.filter(
-            (bet) => bet.marketId === market.id && bet.status === "pending"
+            (bet) => bet && bet.marketId === market.id && bet.status === "pending"
           );
           return {
             id: market.id,
-            name: market.name,
-            status: market.status,
+            name: market.name || "Unknown",
+            status: market.status || "settled",
             pendingCount: pendingBets.length,
-            pendingStake: pendingBets.reduce((sum, bet) => sum + bet.stake, 0),
+            pendingStake: pendingBets.reduce((sum, bet) => sum + (Number(bet?.stake) || 0), 0),
           };
         })
-        .sort((a, b) => b.pendingStake - a.pendingStake),
+        .sort((a, b) => (b.pendingStake || 0) - (a.pendingStake || 0)),
     [markets, bets]
   );
 
-  const openMarkets = markets.filter((m) => m.status === "open").length;
-  const lockedMarkets = markets.filter((m) => m.status === "locked").length;
-  const settledMarkets = markets.filter((m) => m.status === "settled").length;
+  const openMarkets = markets.filter((m) => m?.status === "open").length;
+  const lockedMarkets = markets.filter((m) => m?.status === "locked").length;
+  const settledMarkets = markets.filter((m) => m?.status === "settled").length;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       {/* Stats grid */}
       <div className="grid gap-4 sm:grid-cols-2">
-        <InfoStrip label="Registered users" value={String(users.length)} />
-        <InfoStrip label="Total bets placed" value={String(bets.length)} />
-        <InfoStrip
-          label="Pending deposits"
-          value={String(deposits.length)}
-        />
-        <InfoStrip
-          label="Pending withdrawals"
-          value={String(withdrawals.length)}
-        />
-        <InfoStrip
-          label="Open support tickets"
-          value={String(tickets.length)}
-        />
+        <InfoStrip label="Registered users" value={String(users?.length || 0)} />
+        <InfoStrip label="Total bets placed" value={String(bets?.length || 0)} />
+        <InfoStrip label="Pending deposits" value={String(deposits?.length || 0)} />
+        <InfoStrip label="Pending withdrawals" value={String(withdrawals?.length || 0)} />
+        <InfoStrip label="Open support tickets" value={String(tickets?.length || 0)} />
         <InfoStrip
           label="Total balance in wallets"
-          value={formatCredits(users.reduce((sum, u) => sum + u.wallet, 0))}
+          value={formatCredits(users?.reduce((sum, u) => sum + (Number(u?.wallet) || 0), 0) || 0)}
         />
       </div>
 
@@ -372,8 +364,7 @@ function OverviewTab({
           <h2 className="text-xl font-bold">Market exposure snapshot</h2>
         </div>
         <p className="mt-2 text-sm text-slate-400">
-          Pending risk per market, including locked markets that have not yet
-          settled.
+          Pending risk per market, including locked markets that have not yet settled.
         </p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -405,6 +396,11 @@ function OverviewTab({
               ))}
             </tbody>
           </table>
+          {marketSummaries.length === 0 && (
+            <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
+              No markets available.
+            </p>
+          )}
         </div>
       </SectionCard>
 
@@ -416,23 +412,23 @@ function OverviewTab({
           <LiveDot />
         </div>
         <div className="mt-4 max-h-[34rem] space-y-3 overflow-y-auto pr-1">
-          {events.length === 0 ? (
+          {events?.length === 0 ? (
             <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">
               No activity yet. Events appear here in real time.
             </p>
           ) : (
-            events.map((event) => (
+            events?.map((event) => (
               <div
-                key={event.id}
+                key={event?.id}
                 className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <p className="font-bold text-white">{event.title}</p>
+                  <p className="font-bold text-white">{event?.title || "Unknown Event"}</p>
                   <span className="shrink-0 text-xs text-slate-500">
-                    {timeAgo(event.at)}
+                    {timeAgo(event?.at || Date.now())}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-400">{event.detail}</p>
+                <p className="mt-1 text-sm text-slate-400">{event?.detail || "No details"}</p>
               </div>
             ))
           )}
