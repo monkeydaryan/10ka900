@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npx vite build",
-    "preview": "npx vite preview"
+    "build": "vite build",
+    "preview": "vite preview",
+    "vercel-build": "npm install vite --no-save && npx vite build"
   },
   "dependencies": {
     "clsx": "2.1.1",
