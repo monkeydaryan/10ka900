@@ -704,6 +704,28 @@ function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMar
     return Array.from(map.values()).sort((a, b) => b.totalStake - a.totalStake).slice(0, 12);
   }, [bets, selectedMarket]);
 
+  const [expandedMarketId, setExpandedMarketId] = useState<MarketId | null>(null);
+  const selectionTotalsByMarket = useMemo(() => {
+    const map = new Map<MarketId, { selection: string; totalStake: number; count: number }[]>();
+    markets.forEach((market) => {
+      const sel = new Map<string, { selection: string; totalStake: number; count: number }>();
+      bets
+        .filter((b) => b.marketId === market.id)
+        .forEach((bet) => {
+          const label = bet.mode === "double" ? `Double ${bet.selection}` : `${bet.splitSide} ${bet.selection}`;
+          const cur = sel.get(label);
+          if (cur) {
+            cur.totalStake += bet.stake;
+            cur.count += 1;
+          } else {
+            sel.set(label, { selection: label, totalStake: bet.stake, count: 1 });
+          }
+        });
+      map.set(market.id, Array.from(sel.values()).sort((a, b) => b.totalStake - a.totalStake));
+    });
+    return map;
+  }, [bets, markets]);
+
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <SectionCard>
@@ -824,7 +846,41 @@ function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMar
                   <td className="py-3 pr-4 font-semibold text-white">{summary.totalBets}</td>
                   <td className="py-3 pr-4 text-slate-300">{summary.pendingBetCount}</td>
                   <td className="py-3 font-mono text-cyan-100">{formatCredits(summary.totalStake)}</td>
+                  <td className="py-3 pr-4">
+                    <button
+                      onClick={() => setExpandedMarketId(expandedMarketId === summary.id ? null : summary.id)}
+                      className="rounded-full border border-white/10 px-3 py-1 text-sm text-slate-300 hover:bg-white/5"
+                    >
+                      {expandedMarketId === summary.id ? "Hide selections" : "Show selections"}
+                    </button>
+                  </td>
                 </tr>
+                {expandedMarketId === summary.id && (
+                  <tr className="bg-slate-950/50">
+                    <td colSpan={6} className="p-4">
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[640px] text-left text-sm">
+                          <thead>
+                            <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
+                              <th className="py-3 pr-4">Selection</th>
+                              <th className="py-3 pr-4">Total stake</th>
+                              <th className="py-3">Bets</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(selectionTotalsByMarket.get(summary.id) ?? []).slice(0, 30).map((s) => (
+                              <tr key={s.selection} className="border-b border-white/5">
+                                <td className="py-3 pr-4 text-white font-semibold">{s.selection}</td>
+                                <td className="py-3 pr-4 font-mono text-cyan-100">{formatCredits(s.totalStake)}</td>
+                                <td className="py-3 text-slate-400">{s.count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </td>
+                  </tr>
+                )}
               ))}
             </tbody>
           </table>
