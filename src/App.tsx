@@ -40,7 +40,7 @@ import { K, readStorage, removeStorage, stable, writeStorage } from "@/lib/stora
 import { AdminLogin, Landing, LoginScreen, RegisterScreen } from "@/components/Auth";
 import { Dashboard } from "@/components/Dashboard";
 import type { UserTab, WithdrawForm } from "@/components/Dashboard";
-import { AdminConsole } from "@/components/Admin";
+import { AdminConsole } from "@/components/AdminConsole";
 
 type Screen = "landing" | "register" | "login" | "admin-login" | "dashboard" | "admin";
 
