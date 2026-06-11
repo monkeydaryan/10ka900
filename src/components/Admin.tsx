@@ -41,6 +41,9 @@ export function AdminConsole({
   onRejectWithdraw,
   onResolveTicket,
   onSettleMarket,
+  onCloseMarket,
+  onOpenMarket,
+  onRejectBet,
   onChangePassword,
 }: {
   users: UserProfile[];
@@ -117,7 +120,7 @@ export function AdminConsole({
         {tab === "deposits" && <DepositsTab deposits={deposits} onApprove={onApproveDeposit} onReject={onRejectDeposit} />}
         {tab === "withdrawals" && <WithdrawalsTab withdrawals={withdrawals} onApprove={onApproveWithdraw} onReject={onRejectWithdraw} />}
         {tab === "support" && <SupportTab tickets={tickets} onResolve={onResolveTicket} />}
-        {tab === "settlement" && <SettlementTab markets={markets} onSettleMarket={onSettleMarket} onCloseMarket={onCloseMarket} onOpenMarket={onOpenMarket} />}
+        {tab === "settlement" && <SettlementTab bets={bets} markets={markets} onSettleMarket={onSettleMarket} onCloseMarket={onCloseMarket} onOpenMarket={onOpenMarket} />}
         {tab === "security" && <SecurityTab onChangePassword={onChangePassword} />}
       </div>
     </main>
@@ -337,6 +340,8 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
 
 function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: string) => void }) {
   const pendingBets = bets.filter((bet) => bet.status === "pending");
+  const totalBetsPlaced = bets.length;
+  const totalStakePlaced = bets.reduce((sum, bet) => sum + bet.stake, 0);
   const exposure = useMemo(
     () =>
       Array.from(
@@ -355,13 +360,20 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
     [pendingBets],
   );
   const exposureByMarket = useMemo(() => {
-    const marketMap = new Map<string, { marketName: string; totals: Map<string, number> }>();
+    const marketMap = new Map<string, { marketName: string; totals: Map<string, number>; totalStake: number; count: number }>();
     pendingBets.forEach((bet) => {
       const existing = marketMap.get(bet.marketId);
       if (existing) {
         existing.totals.set(bet.selection, (existing.totals.get(bet.selection) ?? 0) + bet.stake);
+        existing.totalStake += bet.stake;
+        existing.count += 1;
       } else {
-        marketMap.set(bet.marketId, { marketName: bet.marketName, totals: new Map([[bet.selection, bet.stake]]) });
+        marketMap.set(bet.marketId, {
+          marketName: bet.marketName,
+          totals: new Map([[bet.selection, bet.stake]]),
+          totalStake: bet.stake,
+          count: 1,
+        });
       }
     });
     return Array.from(marketMap.values()).map((item) => ({
@@ -384,22 +396,34 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
         <p className="mt-2 text-sm text-slate-400">Review exposure by number and reject pending bets manually to refund stakes instantly.</p>
       </SectionCard>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SectionCard className="p-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Total bets placed</p>
+          <p className="mt-3 font-mono text-3xl font-black text-white">{totalBetsPlaced}</p>
+          <p className="mt-2 text-sm text-slate-400">Total bets recorded in the system across every market.</p>
+        </SectionCard>
+        <SectionCard className="p-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Total stake placed</p>
+          <p className="mt-3 font-mono text-3xl font-black text-white">{formatCredits(totalStakePlaced)}</p>
+          <p className="mt-2 text-sm text-slate-400">Total credits wagered across all bets.</p>
+        </SectionCard>
         <SectionCard className="p-4">
           <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Pending exposure</p>
           <p className="mt-3 font-mono text-3xl font-black text-white">{formatCredits(totalPendingStake)}</p>
           <p className="mt-2 text-sm text-slate-400">Total amount currently at risk across all pending bets.</p>
         </SectionCard>
-        <SectionCard className="p-4">
-          <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Top risk selection</p>
-          <p className="mt-3 font-mono text-3xl font-black text-white">{topExposure ? `${topExposure.selection} · ${formatCredits(topExposure.totalStake)}` : "None yet"}</p>
-          <p className="mt-2 text-sm text-slate-400">Highest-stake pending selection across all markets.</p>
-        </SectionCard>
       </div>
 
       <SectionCard>
-        <h3 className="text-xl font-bold">Market bet chart</h3>
-        <p className="mt-2 text-sm text-slate-400">Live heatmap showing total stakes placed by selection for each market.</p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold">Market bet chart</h3>
+            <p className="mt-2 text-sm text-slate-400">Live heatmap showing total stakes placed by selection for each market.</p>
+          </div>
+          <div className="rounded-full border border-white/10 bg-slate-950/70 px-4 py-2 text-sm text-slate-300">
+            {pendingBets.length} live pending bet{pendingBets.length === 1 ? "" : "s"}
+          </div>
+        </div>
         {exposureByMarket.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No pending bets to chart yet.</p>
         ) : (
@@ -597,11 +621,30 @@ function SupportTab({ tickets, onResolve }: { tickets: SupportTicket[]; onResolv
   );
 }
 
-function SettlementTab({ markets, onSettleMarket, onCloseMarket, onOpenMarket }: { markets: Market[]; onSettleMarket: (marketId: MarketId, resultDecimal: string) => void; onCloseMarket: (marketId: MarketId) => void; onOpenMarket: (marketId: MarketId) => void }) {
-  const [selectedMarket, setSelectedMarket] = useState<MarketId>("hsi");
+function SettlementTab({ bets, markets, onSettleMarket, onCloseMarket, onOpenMarket }: { bets: Bet[]; markets: Market[]; onSettleMarket: (marketId: MarketId, resultDecimal: string) => void; onCloseMarket: (marketId: MarketId) => void; onOpenMarket: (marketId: MarketId) => void }) {
+  const [selectedMarket, setSelectedMarket] = useState<MarketId>(markets[0]?.id ?? "hsi");
   const [resultDigits, setResultDigits] = useState("31");
 
   const activeMarket = markets.find((market) => market.id === selectedMarket);
+  const marketSummaries = useMemo(() =>
+    markets.map((market) => {
+      const marketBets = bets.filter((bet) => bet.marketId === market.id);
+      const pendingBetCount = marketBets.filter((bet) => bet.status === "pending").length;
+      const totalStake = marketBets.reduce((sum, bet) => sum + bet.stake, 0);
+      return {
+        id: market.id,
+        name: market.name,
+        status: market.status,
+        result: market.resultDecimal ?? "--",
+        totalBets: marketBets.length,
+        pendingBetCount,
+        totalStake,
+      };
+    }),
+    [bets, markets],
+  );
+
+  const selectedSummary = marketSummaries.find((summary) => summary.id === selectedMarket);
 
   return (
     <div className="grid gap-5 lg:grid-cols-2">
@@ -640,6 +683,59 @@ function SettlementTab({ markets, onSettleMarket, onCloseMarket, onOpenMarket }:
             </button>
           </div>
           <p className="mt-3 text-sm text-slate-400">Manual close locks betting immediately; pending stakes are refunded to users. Reopen the market to allow new bets again.</p>
+
+          {selectedSummary ? (
+            <div className="mt-6 rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+              <h3 className="text-lg font-bold">Selected market summary</h3>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total bets</p>
+                  <p className="mt-2 text-3xl font-black text-white">{selectedSummary.totalBets}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Pending bets</p>
+                  <p className="mt-2 text-3xl font-black text-white">{selectedSummary.pendingBetCount}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Total stake</p>
+                  <p className="mt-2 text-3xl font-black text-cyan-100">{formatCredits(selectedSummary.totalStake)}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Last result</p>
+                  <p className="mt-2 text-3xl font-black text-white">{selectedSummary.result}</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <h3 className="text-xl font-bold">Market totals</h3>
+        <p className="mt-2 text-sm text-slate-400">Totals for every market, including pending bets and overall stake placed.</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
+                <th className="py-3 pr-4">Market</th>
+                <th className="py-3 pr-4">Status</th>
+                <th className="py-3 pr-4">Total bets</th>
+                <th className="py-3 pr-4">Pending bets</th>
+                <th className="py-3">Total stake</th>
+              </tr>
+            </thead>
+            <tbody>
+              {marketSummaries.map((summary) => (
+                <tr key={summary.id} className="border-b border-white/5">
+                  <td className="py-3 pr-4 text-slate-300">{summary.name}</td>
+                  <td className="py-3 pr-4"><StatusBadge label={summary.status} classes={getMarketStatusClasses(summary.status)} /></td>
+                  <td className="py-3 pr-4 font-semibold text-white">{summary.totalBets}</td>
+                  <td className="py-3 pr-4 text-slate-300">{summary.pendingBetCount}</td>
+                  <td className="py-3 font-mono text-cyan-100">{formatCredits(summary.totalStake)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </SectionCard>
 
