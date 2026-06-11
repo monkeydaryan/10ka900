@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Activity, LockKeyhole, MailCheck, Shield, ShieldCheck, Smartphone, UserPlus, UserRound } from "lucide-react";
-import { API_BASE, BRAND, MAX_DOUBLE_BET, MIN_DEPOSIT, MIN_WITHDRAW, OWNER_EMAIL, generateOtp, passwordIssues } from "@/lib/types";
+import { API_BASE, BRAND, MAX_DOUBLE_BET, MIN_DEPOSIT, MIN_WITHDRAW, generateOtp, passwordIssues } from "@/lib/types";
 import { Field, inputClasses } from "@/components/ui";
 
 /* ------------------------------------------------------------------ */
@@ -163,7 +163,8 @@ const dispatchOtp = async (destination: string, otp: string, channel: "email" | 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ destination, otp, channel }),
     });
-  } catch {
+  } catch (error) {
+    console.error("Failed to send OTP:", error);
     // Local PHP server offline; demo OTP is still shown on screen.
   }
 };
@@ -186,12 +187,27 @@ function OtpVerifier({
   });
   const [entered, setEntered] = useState("");
   const [error, setError] = useState("");
+  const [attempts, setAttempts] = useState(0);
+
+  const handleVerify = () => {
+    if (entered === expected) {
+      onVerified();
+    } else {
+      setAttempts((prev) => prev + 1);
+      if (attempts >= 4) {
+        setError("Too many failed attempts. Please request a new OTP.");
+        setEntered("");
+      } else {
+        setError(`That OTP does not match. ${5 - attempts - 1} attempts remaining.`);
+      }
+    }
+  };
 
   return (
     <div className="animate-fade-up">
       <div className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
         {channel === "email" ? <MailCheck className="h-6 w-6 shrink-0 text-emerald-200" /> : <Smartphone className="h-6 w-6 shrink-0 text-emerald-200" />}
-          <p className="text-sm leading-6 text-emerald-100">
+        <p className="text-sm leading-6 text-emerald-100">
           A 6-digit OTP was sent to <span className="font-bold">{destination}</span> from the {BRAND} local PHP server.
         </p>
       </div>
@@ -209,18 +225,14 @@ function OtpVerifier({
           onChange={(event) => setEntered(event.target.value.replace(/\D/g, "").slice(0, 6))}
           className={`${inputClasses} text-center font-mono text-2xl font-black tracking-[0.6em]`}
           placeholder="••••••"
+          disabled={attempts >= 5}
         />
       </Field>
       {error && <p className="mt-3 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
       <button
-        onClick={() => {
-          if (entered === expected) {
-            onVerified();
-          } else {
-            setError("That OTP does not match. Please re-check and try again.");
-          }
-        }}
-        className="mt-4 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white"
+        onClick={handleVerify}
+        disabled={entered.length !== 6 || attempts >= 5}
+        className="mt-4 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
       >
         Verify OTP
       </button>
@@ -230,6 +242,7 @@ function OtpVerifier({
           setExpected(otp);
           setEntered("");
           setError("");
+          setAttempts(0);
           void dispatchOtp(destination, otp, channel);
         }}
         className="mt-3 w-full rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/40 hover:text-white"
@@ -261,6 +274,29 @@ export function RegisterScreen({
 
   const issues = passwordIssues(password);
 
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
+    if (!name.trim()) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (cleanPhone.length < 10) {
+      setError("Please enter a valid phone number.");
+      return;
+    }
+    if (issues.length > 0) {
+      setError("Your password does not meet the security requirements yet.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setError("");
+    setStep("otp");
+  };
+
   return (
     <AuthShell
       title="Create account"
@@ -279,34 +315,45 @@ export function RegisterScreen({
           </div>
 
           {step === "form" ? (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                const cleanPhone = phone.replace(/[^\d+]/g, "");
-                if (!name.trim()) return setError("Please enter your name.");
-                if (cleanPhone.length < 10) return setError("Please enter a valid phone number.");
-                if (issues.length > 0) return setError("Your password does not meet the security requirements yet.");
-                if (password !== confirm) return setError("Passwords do not match.");
-                setError("");
-                setStep("otp");
-              }}
-            >
+            <form onSubmit={handleSubmit}>
               <div className="space-y-5">
                 <Field label="Full name">
-                  <input value={name} onChange={(e) => setName(e.target.value)} className={inputClasses} placeholder="Your name" autoComplete="name" />
+                  <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={inputClasses}
+                    placeholder="Your name"
+                    autoComplete="name"
+                  />
                 </Field>
                 <Field label="Phone number">
-                  <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClasses} placeholder="+91 98765 43210" autoComplete="tel" />
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className={inputClasses}
+                    placeholder="+91 98765 43210"
+                    autoComplete="tel"
+                  />
                 </Field>
                 <Field label="Password">
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClasses} placeholder="Create a strong password" autoComplete="new-password" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={inputClasses}
+                    placeholder="Create a strong password"
+                    autoComplete="new-password"
+                  />
                 </Field>
                 {password && (
                   <div className="grid grid-cols-2 gap-2">
                     {["At least 8 characters", "One uppercase letter", "One lowercase letter", "One number"].map((rule) => {
                       const met = !issues.includes(rule);
                       return (
-                        <span key={rule} className={`rounded-xl border px-3 py-2 text-xs font-semibold ${met ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-slate-950/60 text-slate-500"}`}>
+                        <span
+                          key={rule}
+                          className={`rounded-xl border px-3 py-2 text-xs font-semibold ${met ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-slate-950/60 text-slate-500"}`}
+                        >
                           {met ? "✓" : "•"} {rule}
                         </span>
                       );
@@ -314,11 +361,21 @@ export function RegisterScreen({
                   </div>
                 )}
                 <Field label="Confirm password">
-                  <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={`${inputClasses} ${confirm && confirm !== password ? "border-red-400/60" : ""}`} placeholder="Repeat the password" autoComplete="new-password" />
+                  <input
+                    type="password"
+                    value={confirm}
+                    onChange={(e) => setConfirm(e.target.value)}
+                    className={`${inputClasses} ${confirm && confirm !== password ? "border-red-400/60" : ""}`}
+                    placeholder="Repeat the password"
+                    autoComplete="new-password"
+                  />
                 </Field>
               </div>
               {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-              <button className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white">
+              <button
+                type="submit"
+                className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white"
+              >
                 Send OTP &amp; verify
               </button>
             </form>
@@ -370,6 +427,26 @@ export function LoginScreen({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+
+    const cleanPhone = phone.replace(/[^\d+]/g, "");
+    if (!cleanPhone) {
+      setError("Please enter your phone number.");
+      return;
+    }
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
+    setBusy(true);
+    const result = await onLogin(cleanPhone, password);
+    setBusy(false);
+    if (result) setError(result);
+  };
+
   return (
     <AuthShell
       title="Player login"
@@ -386,29 +463,44 @@ export function LoginScreen({
           </div>
         </div>
 
-        <form
-          onSubmit={async (event) => {
-            event.preventDefault();
-            if (busy) return;
-            setBusy(true);
-            const result = await onLogin(phone.trim(), password);
-            setBusy(false);
-            if (result) setError(result);
-          }}
-        >
+        <form onSubmit={handleSubmit}>
           <div className="space-y-5">
             <Field label="Registered phone number">
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={inputClasses} placeholder="+91 98765 43210" autoComplete="tel" />
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className={inputClasses}
+                placeholder="+91 98765 43210"
+                autoComplete="tel"
+                disabled={busy}
+              />
             </Field>
             <Field label="Password">
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={inputClasses} placeholder="Your password" autoComplete="current-password" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className={inputClasses}
+                placeholder="Your password"
+                autoComplete="current-password"
+                disabled={busy}
+              />
             </Field>
           </div>
           {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-          <button disabled={busy} className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:bg-slate-700 disabled:text-slate-400">
+          <button
+            type="submit"
+            disabled={busy}
+            className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          >
             {busy ? "Checking…" : "Login"}
           </button>
-          <button type="button" onClick={onRegisterInstead} className="mt-3 w-full rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/40 hover:text-white">
+          <button
+            type="button"
+            onClick={onRegisterInstead}
+            disabled={busy}
+            className="mt-3 w-full rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
             New here? Create an account
           </button>
         </form>
@@ -431,6 +523,25 @@ export function AdminLogin({
   const [adminId, setAdminId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+
+    if (!adminId.trim() || !password.trim()) {
+      setError("Admin ID and password are required.");
+      return;
+    }
+
+    setBusy(true);
+    const success = await onLogin(adminId, password);
+    setBusy(false);
+
+    if (!success) {
+      setError("Invalid admin credentials on local PHP server.");
+    }
+  };
 
   return (
     <AuthShell
@@ -440,15 +551,7 @@ export function AdminLogin({
       onBack={onBack}
     >
       <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (!adminId.trim() || !password.trim()) {
-            setError("Admin ID and password are required.");
-            return;
-          }
-          const success = await onLogin(adminId, password);
-          if (!success) setError("Invalid admin credentials on local PHP server.");
-        }}
+        onSubmit={handleSubmit}
         className="mx-auto max-w-xl rounded-[2rem] border border-violet-300/20 bg-white/[0.05] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl"
       >
         <div className="mb-8 flex items-center gap-3">
@@ -465,6 +568,7 @@ export function AdminLogin({
               placeholder="admin"
               onChange={(e) => setAdminId(e.target.value)}
               className={`${inputClasses} focus:border-violet-300/70`}
+              disabled={busy}
             />
           </Field>
           <Field label="Password">
@@ -474,12 +578,17 @@ export function AdminLogin({
               placeholder="Enter admin password"
               onChange={(e) => setPassword(e.target.value)}
               className={`${inputClasses} focus:border-violet-300/70`}
+              disabled={busy}
             />
           </Field>
         </div>
         {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-        <button className="mt-6 w-full rounded-2xl bg-violet-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white">
-          Unlock admin panel
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-6 w-full rounded-2xl bg-violet-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+        >
+          {busy ? "Checking…" : "Unlock admin panel"}
         </button>
         <p className="mt-5 flex items-center gap-2 text-sm leading-6 text-slate-400">
           <LockKeyhole className="h-4 w-4 shrink-0" />
