@@ -205,7 +205,7 @@ function OverviewTab({
         <InfoStrip label="Pending deposits" value={String(deposits.length)} />
         <InfoStrip label="Pending withdrawals" value={String(withdrawals.length)} />
         <InfoStrip label="Open support tickets" value={String(tickets.length)} />
-        <InfoStrip label="Total balance in wallets" value={formatCredits(users.reduce((sum, u) => sum + u.realWallet, 0))} />
+        <InfoStrip label="Total balance in wallets" value={formatCredits(users.reduce((sum, u) => sum + u.wallet, 0))} />
       </div>
 
       <SectionCard>
@@ -288,7 +288,7 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
                 <th className="py-3 pr-4">User ID</th>
                 <th className="py-3 pr-4">Name</th>
                 <th className="py-3 pr-4">Phone</th>
-                <th className="py-3 pr-4">Demo wallet</th>
+                <th className="py-3 pr-4">Balance</th>
                 <th className="py-3 pr-4">My balance</th>
                 <th className="py-3">Registered</th>
               </tr>
@@ -302,7 +302,7 @@ function UsersTab({ users, events }: { users: UserProfile[]; events: ActivityEve
                     {user.phone || "—"}
                   </td>
                   <td className="py-3 pr-4 font-mono text-slate-300">{formatCredits(user.wallet)}</td>
-                  <td className="py-3 pr-4 font-mono text-emerald-200">{formatCredits(user.realWallet)}</td>
+                  <td className="py-3 pr-4 font-mono text-emerald-200">{formatCredits(user.wallet)}</td>
                   <td className="py-3 text-slate-400">{timeAgo(user.createdAt)}</td>
                 </tr>
               ))}
@@ -354,6 +354,22 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
       ).sort((a, b) => b.totalStake - a.totalStake),
     [pendingBets],
   );
+  const exposureByMarket = useMemo(() => {
+    const marketMap = new Map<string, { marketName: string; totals: Map<string, number> }>();
+    pendingBets.forEach((bet) => {
+      const existing = marketMap.get(bet.marketId);
+      if (existing) {
+        existing.totals.set(bet.selection, (existing.totals.get(bet.selection) ?? 0) + bet.stake);
+      } else {
+        marketMap.set(bet.marketId, { marketName: bet.marketName, totals: new Map([[bet.selection, bet.stake]]) });
+      }
+    });
+    return Array.from(marketMap.values()).map((item) => ({
+      ...item,
+      selections: Array.from(item.totals.entries()).sort((a, b) => b[1] - a[1]),
+      maxStake: Math.max(...Array.from(item.totals.values()), 0),
+    }));
+  }, [pendingBets]);
   const totalPendingStake = pendingBets.reduce((sum, bet) => sum + bet.stake, 0);
   const topExposure = exposure[0];
 
@@ -381,6 +397,40 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
         </SectionCard>
       </div>
 
+      <SectionCard>
+        <h3 className="text-xl font-bold">Market bet chart</h3>
+        <p className="mt-2 text-sm text-slate-400">Live heatmap showing total stakes placed by selection for each market.</p>
+        {exposureByMarket.length === 0 ? (
+          <p className="mt-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No pending bets to chart yet.</p>
+        ) : (
+          <div className="mt-4 space-y-6">
+            {exposureByMarket.map((market) => (
+              <div key={market.marketName} className="rounded-3xl border border-white/10 bg-slate-950/70 p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="font-semibold text-white">{market.marketName}</p>
+                  <p className="text-sm text-slate-400">{formatCredits(market.maxStake)} top stake</p>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {market.selections.slice(0, 6).map(([selection, amount]) => (
+                    <div key={selection}>
+                      <div className="flex items-center justify-between text-sm text-slate-300">
+                        <span>{selection}</span>
+                        <span>{formatCredits(amount)}</span>
+                      </div>
+                      <div className="mt-1 h-3 overflow-hidden rounded-full bg-slate-900">
+                        <div
+                          className="h-full rounded-full bg-cyan-300"
+                          style={{ width: `${amount === 0 ? 3 : Math.max(6, (amount / market.maxStake) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
       <SectionCard>
         <h3 className="text-xl font-bold">Exposure by selection</h3>
         <p className="mt-2 text-sm text-slate-400">This table totals all pending stakes on a single number or double, grouped by market.</p>
@@ -417,24 +467,20 @@ function BetsTab({ bets, onRejectBet }: { bets: Bet[]; onRejectBet: (betId: stri
       <SectionCard>
         <h3 className="text-xl font-bold">Pending bets</h3>
         <div className="mt-4 space-y-3">
-          {bets.length === 0 ? (
-            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No bets placed yet.</p>
+          {pendingBets.length === 0 ? (
+            <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No pending bets at the moment.</p>
           ) : (
-            bets.map((bet) => (
-              <div key={bet.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/60 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+            pendingBets.map((bet) => (
+              <div key={bet.id} className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/80 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
                 <div>
                   <p className="font-bold text-white">{bet.marketName} · {bet.mode === "double" ? "Double" : bet.splitSide} {bet.selection}</p>
-                  <p className="mt-1 text-sm text-slate-400">{bet.userName} · {bet.userId} · stake {formatCredits(bet.stake)}</p>
-                  <p className="mt-1 text-sm text-slate-300 uppercase tracking-[0.18em]">Status: {bet.status === "refunded" ? "Refunded" : bet.status}</p>
+                  <p className="mt-1 text-sm text-slate-300">{bet.userName} · {bet.userId} · stake {formatCredits(bet.stake)}</p>
+                  <p className="mt-1 text-sm uppercase tracking-[0.18em] text-slate-400">Status: {bet.status === "refunded" ? "Refunded" : bet.status}</p>
                 </div>
                 <div className="flex flex-col gap-2 sm:items-end">
-                  {bet.status === "pending" ? (
-                    <button onClick={() => onRejectBet(bet.id)} className="rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-400">
-                      Reject bet & refund
-                    </button>
-                  ) : (
-                    <span className="rounded-full bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-300">{bet.status}</span>
-                  )}
+                  <button onClick={() => onRejectBet(bet.id)} className="rounded-full bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-400">
+                    Reject bet & refund
+                  </button>
                 </div>
               </div>
             ))
@@ -469,7 +515,7 @@ function DepositsTab({ deposits, onApprove, onReject }: { deposits: DepositReque
               ]}
               onApprove={deposit.status === "pending" ? () => onApprove(deposit.id) : undefined}
               onReject={deposit.status === "pending" ? () => onReject(deposit.id) : undefined}
-              approveLabel="Approve & credit real wallet"
+              approveLabel="Approve & credit wallet"
             />
           ))
         )}
@@ -485,7 +531,7 @@ function WithdrawalsTab({ withdrawals, onApprove, onReject }: { withdrawals: Wit
         <Landmark className="h-5 w-5 text-violet-200" />
         <h2 className="text-xl font-bold">Withdrawal verification</h2>
       </div>
-      <p className="mt-1 text-sm text-slate-400">The amount is already on hold from the user's real-credit balance. Approve to initiate the bank payout, or reject to refund the hold.</p>
+      <p className="mt-1 text-sm text-slate-400">The amount is already on hold from the user's wallet balance. Approve to initiate the bank payout, or reject to refund the hold.</p>
       <div className="mt-4 space-y-3">
         {withdrawals.length === 0 ? (
           <p className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-400">No withdrawal requests yet.</p>
@@ -604,7 +650,7 @@ function SettlementTab({ markets, onSettleMarket, onCloseMarket, onOpenMarket }:
         <ChecklistItem>Betting cutoffs: Taiwan 10:53 AM · KOSPI 11:53 AM · Hang Seng 1:32 PM · SENSEX 3:23 PM · DAX 8:55 PM · Dow Jones 12:00 AM.</ChecklistItem>
         <ChecklistItem>Duplicate transaction IDs cannot be submitted twice.</ChecklistItem>
         <ChecklistItem>Withdrawal amounts are held immediately to prevent double spending; rejects refund instantly.</ChecklistItem>
-        <ChecklistItem>Manual market lock refunds all pending bets to user demo wallets.</ChecklistItem>
+        <ChecklistItem>Manual market lock refunds all pending bets to user wallets.</ChecklistItem>
         <ChecklistItem>Registrations and logins are OTP verified and reported to platform operations.</ChecklistItem>
         <ChecklistItem>Admin session is fully isolated from the player application.</ChecklistItem>
       </SectionCard>

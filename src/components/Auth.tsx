@@ -49,8 +49,8 @@ export function Landing({
               Market<br />90x
             </h1>
             <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl">
-              Wager on the exact final decimals of global market closes. OTP-secured accounts, a verified real-credit
-              wallet, instant 90x double-digit payouts, and admin-approved deposits and withdrawals.
+              Wager on the exact final decimals of global market closes. OTP-secured accounts, a verified wallet,
+              instant 90x double-digit payouts, and admin-approved deposits and withdrawals.
             </p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <button
@@ -338,12 +338,12 @@ export function RegisterScreen({
             <h3 className="text-3xl font-black tracking-[-0.05em] text-white">One identity. Fully audited.</h3>
             <p className="mt-4 leading-7 text-slate-300">
               Every new registration is OTP verified and reported live to the platform operations team.
-              Your unique User ID locks together your virtual wallet, demo wallet, bets, deposits, and withdrawals.
+              Your unique User ID locks together your wallet, bets, deposits, and withdrawals.
             </p>
           </div>
           <ul className="mt-8 space-y-3 text-sm leading-6 text-slate-300">
             <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Free phone OTP: Firebase Phone Auth free tier.</li>
-            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Welcome bonus: 2,500 virtual demo credits.</li>
+            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Welcome bonus: 2,500 starting credits.</li>
           </ul>
         </div>
       </div>

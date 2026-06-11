@@ -30,7 +30,6 @@ export interface UserProfile {
   email: string;
   phone: string;
   wallet: number;
-  realWallet: number;
   createdAt: string;
   /** Random per-user salt — passwords are never stored in plain text. */
   salt: string;

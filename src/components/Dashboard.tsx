@@ -120,13 +120,7 @@ export function Dashboard({
                 </div>
               </div>
             </div>
-            <MetricPill icon={<WalletCards className="h-4 w-4" />} label="Demo wallet" value={formatCredits(user.wallet)} />
-            <MetricPill
-              icon={<Banknote className="h-4 w-4" />}
-              label="My balance"
-              value={formatCredits(user.realWallet)}
-              accent
-            />
+            <MetricPill icon={<WalletCards className="h-4 w-4" />} label="Balance" value={formatCredits(user.wallet)} accent />
             <MetricPill
               icon={<TimerReset className="h-4 w-4" />}
               label="Pending bets"
@@ -382,7 +376,7 @@ function BettingWidget({
       <div className="mt-5 grid gap-4 rounded-[1.5rem] border border-white/10 bg-slate-950/70 p-4 lg:grid-cols-[1fr_1.2fr]">
         <label>
           <span className="mb-2 block text-xs uppercase tracking-[0.22em] text-slate-500">
-            Stake (demo credits){mode === "double" ? ` · max ${MAX_DOUBLE_BET}` : ""}
+            Stake{mode === "double" ? ` · max ${MAX_DOUBLE_BET}` : ""}
           </span>
           <input
             type="number"
@@ -427,7 +421,7 @@ function BettingWidget({
           : overMax
             ? `Max ${MAX_DOUBLE_BET} on double digit`
             : wallet < stake
-              ? "Insufficient demo credits"
+              ? "Insufficient balance"
               : "Place bet"}
       </button>
       <p className="mt-3 text-center text-xs text-slate-500">
@@ -598,8 +592,7 @@ function WalletPanel({
   return (
     <div className="space-y-5">
       <div className="grid gap-4 md:grid-cols-4">
-        <InfoStrip label="My balance" value={formatCredits(user.realWallet)} />
-        <InfoStrip label="Demo wallet" value={formatCredits(user.wallet)} />
+        <InfoStrip label="Balance" value={formatCredits(user.wallet)} />
         <InfoStrip label="Pending deposits" value={String(pendingDeposits)} />
         <InfoStrip label="Pending withdrawals" value={String(pendingWithdrawals)} />
       </div>
@@ -610,7 +603,7 @@ function WalletPanel({
           <div className="flex items-center gap-3">
             <QrCode className="h-7 w-7 text-cyan-200" />
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">Deposit demo credits</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-cyan-200/80">Deposit credits</p>
               <h2 className="text-3xl font-black tracking-[-0.06em]">Scan &amp; pay</h2>
             </div>
           </div>
@@ -627,7 +620,7 @@ function WalletPanel({
                 <li>Scan the QR with any UPI app and pay your deposit amount.</li>
                 <li>Minimum deposit is <span className="font-bold text-white">{MIN_DEPOSIT} credits</span>.</li>
                 <li>Paste the exact transaction ID below.</li>
-                <li>Admin verifies your User ID + transaction ID, then credits your real wallet.</li>
+                <li>Admin verifies your User ID + transaction ID, then credits your wallet.</li>
               </ol>
             </div>
           </div>
@@ -651,7 +644,7 @@ function WalletPanel({
               if (error) {
                 setDepositMsg({ kind: "err", text: error });
               } else {
-                setDepositMsg({ kind: "ok", text: "Deposit request sent to admin for verification. Credits appear in your real wallet after approval." });
+                setDepositMsg({ kind: "ok", text: "Deposit request sent to admin for verification. Credits appear in your wallet after approval." });
                 setTxId("");
               }
             }}
@@ -678,7 +671,7 @@ function WalletPanel({
           <div className="flex items-center gap-3">
             <Landmark className="h-7 w-7 text-emerald-200" />
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Withdraw demo credits</p>
+              <p className="text-xs uppercase tracking-[0.3em] text-emerald-200/80">Withdraw credits</p>
               <h2 className="text-3xl font-black tracking-[-0.06em]">Bank payout</h2>
             </div>
           </div>
@@ -697,8 +690,8 @@ function WalletPanel({
               <input value={ifsc} onChange={(e) => setIfsc(e.target.value.toUpperCase())} className={`${inputClasses} font-mono`} placeholder="HDFC0001234" />
             </Field>
             <div className="sm:col-span-2">
-              <Field label={`Amount to withdraw (min ${MIN_WITHDRAW}, available ${formatCredits(user.realWallet)})`}>
-                <input type="number" min={MIN_WITHDRAW} max={user.realWallet} value={wAmount} onChange={(e) => setWAmount(Number(e.target.value))} className={inputClasses} />
+              <Field label={`Amount to withdraw (min ${MIN_WITHDRAW}, available ${formatCredits(user.wallet)})`}>
+                <input type="number" min={MIN_WITHDRAW} max={user.wallet} value={wAmount} onChange={(e) => setWAmount(Number(e.target.value))} className={inputClasses} />
               </Field>
             </div>
           </div>
@@ -721,7 +714,7 @@ function WalletPanel({
             Request withdrawal
           </button>
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            The requested amount is held from your real-credit balance immediately to prevent double spending. If the admin rejects the request, the hold is refunded instantly.
+            The requested amount is held from your wallet balance immediately to prevent double spending. If the admin rejects the request, the hold is refunded instantly.
           </p>
 
           <div className="mt-6 space-y-3">
@@ -803,7 +796,7 @@ function SupportPanel({
       { from: "user", text: `Transaction ID: ${txId.trim().toUpperCase()}${screenshotName ? ` · Screenshot: ${screenshotName}` : ""}` },
       {
         from: "bot",
-        text: "Thank you! Your ticket has been sent straight to the admin panel. You'll see your real-credit wallet update as soon as the admin verifies the payment.",
+        text: "Thank you! Your ticket has been sent straight to the admin panel. You'll see your wallet update as soon as the admin verifies the payment.",
       },
     ]);
     setStage("done");
@@ -943,8 +936,7 @@ function ProfilePanel({
             <InfoStrip label="Phone" value={user.phone || "—"} />
             <InfoStrip label="Member since" value={new Date(user.createdAt).toLocaleDateString()} />
             <InfoStrip label="Account status" value="Verified · OTP" />
-            <InfoStrip label="Demo wallet" value={formatCredits(user.wallet)} />
-            <InfoStrip label="My balance" value={formatCredits(user.realWallet)} />
+            <InfoStrip label="Balance" value={formatCredits(user.wallet)} />
           </div>
         </SectionCard>
 

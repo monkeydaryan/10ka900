@@ -175,7 +175,6 @@ export default function App() {
       email: "",
       phone,
       wallet: 2500,
-      realWallet: 0,
       createdAt: new Date().toISOString(),
       salt,
       passwordHash,
@@ -304,7 +303,7 @@ export default function App() {
     if (!Number.isFinite(stake) || stake < 1) return "Stake must be at least 1 credit.";
     if (mode === "double" && stake > MAX_DOUBLE_BET)
       return `Maximum bet on a single double-digit number is ${MAX_DOUBLE_BET} credits.`;
-    if (currentUser.wallet < stake) return "Insufficient play credits for this stake.";
+    if (currentUser.wallet < stake) return "Insufficient credits for this stake.";
     if (mode === "double" && !/^\d{2}$/.test(selection)) return "Pick a number between 00 and 99.";
     if (mode === "split" && !/^\d$/.test(selection)) return "Pick a single digit between 0 and 9.";
 
@@ -365,7 +364,7 @@ export default function App() {
     const request = deposits.find((d) => d.id === id);
     if (!request || request.status !== "pending") return;
     const nextUsers = users.map((user) =>
-      user.userId === request.userId ? { ...user, realWallet: user.realWallet + request.amount } : user,
+      user.userId === request.userId ? { ...user, wallet: user.wallet + request.amount } : user,
     );
     persistUsers(nextUsers);
     persistDeposits(deposits.map((d) => (d.id === id ? { ...d, status: "approved" as RequestStatus } : d)));
@@ -397,7 +396,7 @@ export default function App() {
     if (form.accountNumber.replace(/\D/g, "").length < 8) return "Please enter a valid bank account number.";
     if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(form.ifsc.trim())) return "Please enter a valid IFSC code (e.g. HDFC0001234).";
     if (!Number.isFinite(form.amount) || form.amount < MIN_WITHDRAW) return `Minimum withdrawal is ${MIN_WITHDRAW} credits.`;
-    if (form.amount > currentUser.realWallet) return `You only have ${formatCredits(currentUser.realWallet)} in your real-credit wallet.`;
+    if (form.amount > currentUser.wallet) return `You only have ${formatCredits(currentUser.wallet)} in your wallet.`;
 
     const request: WithdrawRequest = {
       id: createId("WDL"),
@@ -411,7 +410,7 @@ export default function App() {
       status: "pending",
       createdAt: new Date().toISOString(),
     };
-    const held = { ...currentUser, realWallet: currentUser.realWallet - form.amount };
+    const held = { ...currentUser, wallet: currentUser.wallet - form.amount };
     persistUsers(users.map((user) => (user.userId === currentUser.userId ? held : user)));
     updateCurrentUser(held);
     persistWithdrawals([request, ...withdrawals]);
@@ -430,7 +429,7 @@ export default function App() {
     const request = withdrawals.find((w) => w.id === id);
     if (!request || request.status !== "pending") return;
     const nextUsers = users.map((user) =>
-      user.userId === request.userId ? { ...user, realWallet: user.realWallet + request.amount } : user,
+      user.userId === request.userId ? { ...user, wallet: user.wallet + request.amount } : user,
     );
     persistUsers(nextUsers);
     persistWithdrawals(withdrawals.map((w) => (w.id === id ? { ...w, status: "rejected" as RequestStatus } : w)));
