@@ -7,6 +7,7 @@ import {
   MIN_WITHDRAW,
   OWNER_EMAIL,
   formatCredits,
+  getMarketStatusClasses,
   getRequestStatusClasses,
   timeAgo,
 } from "@/lib/types";
@@ -110,7 +111,7 @@ export function AdminConsole({
           ))}
         </div>
 
-        {tab === "overview" && <OverviewTab users={users} bets={bets} deposits={pendingDeposits} withdrawals={pendingWithdrawals} tickets={openTickets} events={events} />}
+        {tab === "overview" && <OverviewTab users={users} bets={bets} deposits={pendingDeposits} withdrawals={pendingWithdrawals} tickets={openTickets} events={events} markets={markets} />}
         {tab === "users" && <UsersTab users={users} events={events} />}
         {tab === "bets" && <BetsTab bets={bets} onRejectBet={onRejectBet} />}
         {tab === "deposits" && <DepositsTab deposits={deposits} onApprove={onApproveDeposit} onReject={onRejectDeposit} />}
@@ -165,6 +166,7 @@ function OverviewTab({
   withdrawals,
   tickets,
   events,
+  markets,
 }: {
   users: UserProfile[];
   bets: Bet[];
@@ -172,7 +174,29 @@ function OverviewTab({
   withdrawals: WithdrawRequest[];
   tickets: SupportTicket[];
   events: ActivityEvent[];
+  markets: Market[];
 }) {
+  const marketSummaries = useMemo(
+    () =>
+      markets
+        .map((market) => {
+          const pendingBets = bets.filter((bet) => bet.marketId === market.id && bet.status === "pending");
+          return {
+            id: market.id,
+            name: market.name,
+            status: market.status,
+            pendingCount: pendingBets.length,
+            pendingStake: pendingBets.reduce((sum, bet) => sum + bet.stake, 0),
+          };
+        })
+        .sort((a, b) => b.pendingStake - a.pendingStake),
+    [markets, bets],
+  );
+
+  const openMarkets = markets.filter((market) => market.status === "open").length;
+  const lockedMarkets = markets.filter((market) => market.status === "locked").length;
+  const settledMarkets = markets.filter((market) => market.status === "settled").length;
+
   return (
     <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
       <div className="grid gap-4 sm:grid-cols-2">
@@ -183,6 +207,44 @@ function OverviewTab({
         <InfoStrip label="Open support tickets" value={String(tickets.length)} />
         <InfoStrip label="Total balance in wallets" value={formatCredits(users.reduce((sum, u) => sum + u.realWallet, 0))} />
       </div>
+
+      <SectionCard>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <InfoStrip label="Open markets" value={String(openMarkets)} />
+          <InfoStrip label="Locked markets" value={String(lockedMarkets)} />
+          <InfoStrip label="Settled markets" value={String(settledMarkets)} />
+        </div>
+      </SectionCard>
+
+      <SectionCard>
+        <div className="flex items-center gap-3">
+          <ListChecks className="h-5 w-5 text-violet-200" />
+          <h2 className="text-xl font-bold">Market exposure snapshot</h2>
+        </div>
+        <p className="mt-2 text-sm text-slate-400">Pending risk per market, including locked markets that have not yet settled.</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-white/10 text-xs uppercase tracking-[0.18em] text-slate-500">
+                <th className="py-3 pr-4">Market</th>
+                <th className="py-3 pr-4">Status</th>
+                <th className="py-3 pr-4">Pending bets</th>
+                <th className="py-3">Pending stake</th>
+              </tr>
+            </thead>
+            <tbody>
+              {marketSummaries.map((summary) => (
+                <tr key={summary.id} className="border-b border-white/5">
+                  <td className="py-3 pr-4 text-slate-300">{summary.name}</td>
+                  <td className="py-3 pr-4"><StatusBadge label={summary.status} classes={getMarketStatusClasses(summary.status)} /></td>
+                  <td className="py-3 pr-4 text-white font-semibold">{summary.pendingCount}</td>
+                  <td className="py-3 font-mono text-cyan-100">{formatCredits(summary.pendingStake)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
 
       <SectionCard>
         <div className="flex items-center gap-3">

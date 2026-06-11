@@ -98,6 +98,8 @@ export function Dashboard({
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }) {
   const activeMarket = markets.find((market) => market.id === activeTab);
+  const pendingBetsCount = bets.filter((bet) => bet.status === "pending").length;
+  const pendingStake = bets.filter((bet) => bet.status === "pending").reduce((sum, bet) => sum + bet.stake, 0);
 
   return (
     <main className="min-h-screen bg-[#050813] text-white">
@@ -108,7 +110,7 @@ export function Dashboard({
             <p className="text-xs uppercase tracking-[0.5em] text-cyan-200/70">{BRAND} terminal</p>
             <h1 className="mt-2 text-4xl font-black uppercase tracking-[-0.07em] sm:text-5xl">Market close arena</h1>
           </div>
-          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[700px]">
+          <div className="grid gap-3 sm:grid-cols-4 xl:min-w-[900px]">
             <div className="rounded-3xl border border-cyan-300/20 bg-cyan-300/[0.06] px-4 py-3">
               <div className="flex items-center gap-3">
                 <LockKeyhole className="h-5 w-5 shrink-0 text-cyan-200" />
@@ -124,6 +126,11 @@ export function Dashboard({
               label="My balance"
               value={formatCredits(user.realWallet)}
               accent
+            />
+            <MetricPill
+              icon={<TimerReset className="h-4 w-4" />}
+              label="Pending bets"
+              value={`${pendingBetsCount} · ${formatCredits(pendingStake)}`}
             />
           </div>
           <button onClick={onLogout} className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-white/40 hover:text-white">
@@ -212,6 +219,8 @@ function MarketPanel({
 }) {
   const now = useNow();
   const marketBets = bets.filter((bet) => bet.marketId === market.id);
+  const pendingMarketBets = marketBets.filter((bet) => bet.status === "pending");
+  const marketPendingStake = pendingMarketBets.reduce((sum, bet) => sum + bet.stake, 0);
   const bettingOpen = isBettingOpen(market, now);
   const countdown = timeUntilCutoff(market, now);
 
@@ -258,6 +267,11 @@ function MarketPanel({
             <TickerMetric label="Last close" value={market.lastPrice.toLocaleString("en-US", { minimumFractionDigits: 2 })} />
             <TickerMetric label="Change" value={`${market.change > 0 ? "+" : ""}${market.change}%`} tone={market.change >= 0 ? "good" : "bad"} />
             <TickerMetric label="Winning digits" value={`.${market.resultDecimal}`} tone="accent" />
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <InfoStrip label="Pending bets" value={String(pendingMarketBets.length)} />
+            <InfoStrip label="Stake at risk" value={formatCredits(marketPendingStake)} />
           </div>
 
           <div className="mt-8">
