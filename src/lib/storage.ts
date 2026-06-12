@@ -24,7 +24,7 @@ const LOCAL_ONLY_KEYS = new Set<string>([K.currentUser, K.loginGuard]);
 
 const memoryCache: Record<string, unknown> = {};
 const initialized: Record<string, boolean> = {};
-const loadPromises: Record<string, Promise<void>> = {};
+const pendingWrites: Record<string, number> = {};
 
 const localRead = <T,>(key: string, fallback: T): T => {
   try {
@@ -51,6 +51,30 @@ const localRemove = (key: string) => {
   }
 };
 
+/**
+ * Recursively removes undefined values from objects/arrays.
+ * Firebase rejects any field set to `undefined`.
+ */
+function cleanForFirebase(value: any): any {
+  if (value === undefined) return null;
+  if (value === null) return null;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map(cleanForFirebase);
+  }
+  const cleaned: Record<string, any> = {};
+  for (const key in value) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      const cleanedValue = cleanForFirebase(value[key]);
+      // Skip undefined entirely, but keep null
+      if (cleanedValue !== undefined) {
+        cleaned[key] = cleanedValue;
+      }
+    }
+  }
+  return cleaned;
+}
+
 async function loadFromFirestore<T>(key: string, fallback: T) {
   try {
     const ref = doc(db, "app_data", key);
@@ -61,8 +85,7 @@ async function loadFromFirestore<T>(key: string, fallback: T) {
       memoryCache[key] = data !== null && data !== undefined ? data : fallback;
     } else {
       memoryCache[key] = fallback;
-      // Initialize the document so future writes can update it
-      await setDoc(ref, { value: fallback, updatedAt: Date.now() });
+      await setDoc(ref, { value: cleanForFirebase(fallback), updatedAt: Date.now() });
     }
 
     window.dispatchEvent(new Event("firebase-sync"));
@@ -75,11 +98,12 @@ async function loadFromFirestore<T>(key: string, fallback: T) {
 async function writeToFirestore<T>(key: string, value: T) {
   try {
     const ref = doc(db, "app_data", key);
+    const cleanedValue = cleanForFirebase(value);
     await setDoc(ref, {
-      value,
+      value: cleanedValue,
       updatedAt: Date.now(),
     });
-    console.log(`✅ Firebase write success: ${key}`, value);
+    console.log(`✅ Firebase write success: ${key}`, cleanedValue);
   } catch (error) {
     console.error(`❌ Firebase write failed for ${key}:`, error);
   }
@@ -96,7 +120,7 @@ export const readStorage = <T,>(key: string, fallback: T): T => {
 
   if (!initialized[key]) {
     initialized[key] = true;
-    loadPromises[key] = loadFromFirestore(key, fallback);
+    void loadFromFirestore(key, fallback);
   }
 
   return fallback;
@@ -108,11 +132,16 @@ export const writeStorage = <T,>(key: string, value: T) => {
     return;
   }
 
-  // Update cache immediately
   memoryCache[key] = value;
 
-  // Always write to Firestore (even if cache wasn't ready)
-  void writeToFirestore(key, value);
+  if (pendingWrites[key]) {
+    clearTimeout(pendingWrites[key]);
+  }
+
+  pendingWrites[key] = window.setTimeout(() => {
+    void writeToFirestore(key, value);
+    delete pendingWrites[key];
+  }, 100);
 };
 
 export const removeStorage = (key: string) => {
@@ -140,6 +169,11 @@ export function startFirebaseSync() {
         const key = change.doc.id;
 
         if (LOCAL_ONLY_KEYS.has(key)) return;
+
+        if (pendingWrites[key]) {
+          console.log(`⏸️ Skipping sync for ${key} (pending write)`);
+          return;
+        }
 
         const value = change.doc.data().value;
 
