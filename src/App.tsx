@@ -36,7 +36,7 @@ import type {
   UserProfile,
   WithdrawRequest,
 } from "@/lib/types";
-import { K, readStorage, removeStorage, stable, writeStorage } from "@/lib/storage";
+import { K, readStorage, removeStorage, stable, writeStorage, startFirebaseSync } from "@/lib/storage";
 import { AdminLogin, Landing, LoginScreen, RegisterScreen } from "@/components/Auth";
 import { Dashboard } from "@/components/Dashboard";
 import type { UserTab, WithdrawForm } from "@/components/Dashboard";
@@ -67,7 +67,7 @@ export default function App() {
   /* ------------------------------------------------------------ */
   /* Live sync: cross-tab storage events + polling for admin views */
   /* ------------------------------------------------------------ */
-  useEffect(() => {
+useEffect(() => {
     const sync = () => {
       setUsers((prev) => stable(prev, readStorage(K.users, prev)));
       setBets((prev) => stable(prev, readStorage(K.bets, prev)));
@@ -78,11 +78,15 @@ export default function App() {
       setEvents((prev) => stable(prev, readStorage(K.events, prev)));
       setCurrentUser((prev) => stable(prev, readStorage<UserProfile | null>(K.currentUser, prev)));
     };
+    window.addEventListener("firebase-sync", sync);
     window.addEventListener("storage", sync);
+    const unsubscribe = startFirebaseSync();
     const interval = window.setInterval(sync, 3000);
     return () => {
+      window.removeEventListener("firebase-sync", sync);
       window.removeEventListener("storage", sync);
       window.clearInterval(interval);
+      unsubscribe();
     };
   }, []);
 
