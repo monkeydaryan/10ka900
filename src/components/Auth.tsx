@@ -1,11 +1,20 @@
+// MARKET 90XX - Auth.tsx - 91 Club Mobile UI Reskin
+// Game/auth logic is 100% untouched - only UI changed
+// Drop-in replacement for src/components/Auth.tsx
+
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { Activity, LockKeyhole, MailCheck, Shield, ShieldCheck, Smartphone, UserPlus, UserRound } from "lucide-react";
 import { API_BASE, BRAND, MAX_DOUBLE_BET, MIN_DEPOSIT, MIN_WITHDRAW, generateOtp, passwordIssues } from "@/lib/types";
-import { Field, inputClasses } from "@/components/ui";
+import { Field } from "@/components/ui";
+
+// Simple mobile input style to match Dashboard.91club.tsx
+const mInput = "w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-[15px] outline-none focus:border-[#e53935]";
+const mBtnPrimary = "w-full rounded-xl bg-[#e53935] px-4 py-3.5 text-sm font-black text-white hover:bg-[#c62828] transition disabled:bg-slate-300 disabled:text-slate-500";
+const mBtnGhost = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50";
 
 /* ------------------------------------------------------------------ */
-/* Landing                                                             */
+/* Landing                                                            */
 /* ------------------------------------------------------------------ */
 
 export function Landing({
@@ -18,107 +27,55 @@ export function Landing({
   onAdmin: () => void;
 }) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#050813] text-white">
-      <div className="grid-bg absolute inset-0 opacity-70" />
-      <div className="orb absolute left-[-12rem] top-[-10rem] h-[32rem] w-[32rem] rounded-full bg-cyan-400/20 blur-3xl" />
-      <div className="orb-delayed absolute bottom-[-16rem] right-[-12rem] h-[38rem] w-[38rem] rounded-full bg-violet-500/20 blur-3xl" />
-
-      <section className="relative flex min-h-screen flex-col justify-between px-5 py-6 sm:px-8 lg:px-12">
-        <nav className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full border border-cyan-300/40 bg-cyan-300/10 text-cyan-200 shadow-[0_0_40px_rgba(34,211,238,0.25)]">
-              <Activity className="h-5 w-5" />
-            </span>
-            <span>
-              <span className="block text-xs uppercase tracking-[0.42em] text-cyan-200/80">{BRAND}</span>
-              <span className="block text-sm text-slate-400">Decimal close gaming protocol</span>
-            </span>
-          </div>
-          <button
-            onClick={onAdmin}
-            className="rounded-full border border-white/10 px-4 py-2 text-sm text-slate-300 transition hover:border-violet-300/40 hover:text-white"
-          >
-            Admin console
-          </button>
-        </nav>
-
-        <div className="grid items-end gap-10 lg:grid-cols-[1fr_0.82fr]">
-          <div className="max-w-5xl animate-fade-up">
-            <p className="mb-5 text-sm uppercase tracking-[0.5em] text-cyan-200/80">Real-credit market micro-games</p>
-            <h1 className="text-balance text-6xl font-black uppercase leading-[0.84] tracking-[-0.08em] text-white sm:text-8xl lg:text-[8.8rem]">
-              Market<br />90x
-            </h1>
-            <p className="mt-8 max-w-2xl text-lg leading-8 text-slate-300 sm:text-xl">
-              Wager on the exact final decimals of global market closes. OTP-secured accounts, a verified wallet,
-              instant 90x double-digit payouts, and admin-approved deposits and withdrawals.
-            </p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <button
-                onClick={onRegister}
-                className="rounded-full bg-cyan-300 px-7 py-4 text-sm font-bold uppercase tracking-[0.18em] text-slate-950 shadow-[0_0_50px_rgba(34,211,238,0.35)] transition hover:bg-white"
-              >
-                Create account
-              </button>
-              <button
-                onClick={onLogin}
-                className="rounded-full border border-white/15 px-7 py-4 text-sm font-bold uppercase tracking-[0.18em] text-white transition hover:border-white/50 hover:bg-white/5"
-              >
-                Player login
-              </button>
+    <div className="min-h-screen bg-[#e8e8e8] flex justify-center text-slate-900">
+      <div className="w-full max-w-[420px] bg-[#f5f5f7] min-h-screen relative flex flex-col">
+        <div className="flex-1 px-5 pt-14 pb-8 flex flex-col">
+          <div className="text-center">
+            <div className="mx-auto w-14 h-14 rounded-2xl bg-[#e53935] text-white flex items-center justify-center shadow-lg">
+              <Activity className="h-7 w-7" />
             </div>
+            <div className="mt-3 font-black text-[22px] tracking-wide">
+              MARKET <span className="text-[#e53935]">90XX</span>
+            </div>
+            <div className="text-slate-500 text-sm">Decimal close gaming</div>
           </div>
 
-          <div className="relative hidden min-h-[36rem] lg:block">
-            <MarketPlane />
+          <div className="mt-10 bg-gradient-to-br from-[#ff5a4a] to-[#e53935] text-white rounded-[24px] p-6 shadow-lg">
+            <div className="text-xs uppercase tracking-widest opacity-90">Real-credit markets</div>
+            <h1 className="text-[34px] font-black leading-tight mt-1">Market<br/>90XX</h1>
+            <p className="mt-3 text-white/90 text-[14px] leading-relaxed">
+              Wager on the exact closing decimals. OTP-secured, instant payouts, admin-verified wallet.
+            </p>
           </div>
-        </div>
 
-        <div className="ticker-marquee border-y border-white/10 py-3 text-xs uppercase tracking-[0.32em] text-cyan-100/70">
-          <span>Double digit match pays 90x</span>
-          <span>Max {MAX_DOUBLE_BET} credits per double-digit number</span>
-          <span>Minimum deposit {MIN_DEPOSIT} credits</span>
-          <span>Minimum withdrawal {MIN_WITHDRAW} credits</span>
-          <span>Per-market betting cutoff clocks</span>
-          <span>OTP secured registration</span>
-        </div>
-      </section>
-    </main>
-  );
-}
+          <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+            <div className="bg-white rounded-xl border border-slate-200 p-3">Double match<br/><b>90x payout</b></div>
+            <div className="bg-white rounded-xl border border-slate-200 p-3">Min deposit<br/><b>{MIN_DEPOSIT} credits</b></div>
+            <div className="bg-white rounded-xl border border-slate-200 p-3">Min withdraw<br/><b>{MIN_WITHDRAW} credits</b></div>
+            <div className="bg-white rounded-xl border border-slate-200 p-3">Max double bet<br/><b>{MAX_DOUBLE_BET}</b></div>
+          </div>
 
-function MarketPlane() {
-  return (
-    <div className="absolute inset-0 animate-float-panel">
-      <div className="scanline absolute inset-x-10 top-20 h-72 border border-cyan-200/15 bg-cyan-200/[0.03]" />
-      <div className="absolute left-8 top-10 h-24 w-64 border-l border-cyan-300/40 pl-5">
-        <p className="text-xs uppercase tracking-[0.35em] text-cyan-200">Closing decimal</p>
-        <p className="mt-2 text-6xl font-black tracking-[-0.08em] text-white">.89</p>
+          <div className="mt-auto pt-8 space-y-2.5">
+            <button onClick={onRegister} className={mBtnPrimary + " !py-4 text-[15px]"}>
+              Create account
+            </button>
+            <button onClick={onLogin} className={mBtnGhost}>
+              Player Login
+            </button>
+            <button onClick={onAdmin} className="w-full text-center text-[12px] text-slate-500 py-2">
+              Admin console
+            </button>
+          </div>
+
+          <div className="text-center text-[11px] text-slate-400 mt-3">18+ · Play Responsibly</div>
+        </div>
       </div>
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 540 560" fill="none">
-        <path d="M38 422C96 326 152 363 220 259C289 155 344 219 407 125C450 61 487 70 516 41" stroke="url(#line)" strokeWidth="4" />
-        <path d="M38 422C96 326 152 363 220 259C289 155 344 219 407 125C450 61 487 70 516 41" stroke="white" strokeOpacity="0.18" strokeWidth="18" />
-        <defs>
-          <linearGradient id="line" x1="38" x2="516" y1="422" y2="41" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#22d3ee" />
-            <stop offset="1" stopColor="#a78bfa" />
-          </linearGradient>
-        </defs>
-      </svg>
-      {["00", "11", "24", "57", "66", "89"].map((digit, index) => (
-        <span
-          key={digit}
-          className="absolute rounded-full border border-cyan-300/30 bg-slate-950/70 px-3 py-1 text-sm font-bold text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.18)]"
-          style={{ left: `${12 + index * 13}%`, top: `${70 - index * 9}%`, animation: `fadeUp 900ms ease ${index * 110}ms both` }}
-        >
-          {digit}
-        </span>
-      ))}
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Shared shell                                                        */
+/* Shared shell                                                       */
 /* ------------------------------------------------------------------ */
 
 export function AuthShell({
@@ -135,25 +92,24 @@ export function AuthShell({
   children: ReactNode;
 }) {
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#050813] px-5 py-6 text-white sm:px-8">
-      <div className="grid-bg absolute inset-0 opacity-60" />
-      <div className="relative mx-auto max-w-6xl">
-        <button onClick={onBack} className="mb-10 text-sm uppercase tracking-[0.24em] text-slate-400 transition hover:text-white">
-          Back to {BRAND}
-        </button>
-        <div className="mb-10 max-w-3xl">
-          <p className="text-sm uppercase tracking-[0.45em] text-cyan-200/80">{title}</p>
-          <h1 className="mt-3 text-5xl font-black tracking-[-0.08em] text-white sm:text-6xl">{headline}</h1>
-          <p className="mt-4 text-lg leading-8 text-slate-300">{subtitle}</p>
+    <div className="min-h-screen bg-[#e8e8e8] flex justify-center text-slate-900">
+      <div className="w-full max-w-[420px] bg-[#f5f5f7] min-h-screen">
+        <div className="px-4 py-4">
+          <button onClick={onBack} className="text-sm text-slate-500 hover:text-slate-800">← Back to {BRAND}</button>
+          <div className="mt-4">
+            <p className="text-[11px] uppercase tracking-widest text-[#e53935] font-bold">{title}</p>
+            <h1 className="text-[26px] font-black text-slate-900">{headline}</h1>
+            <p className="mt-1 text-sm text-slate-600">{subtitle}</p>
+          </div>
+          <div className="mt-4">{children}</div>
         </div>
-        {children}
       </div>
-    </main>
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* OTP helper                                                          */
+/* OTP helper - LOGIC UNCHANGED                                       */
 /* ------------------------------------------------------------------ */
 
 const dispatchOtp = async (destination: string, otp: string, channel: "email" | "sms") => {
@@ -165,7 +121,6 @@ const dispatchOtp = async (destination: string, otp: string, channel: "email" | 
     });
   } catch (error) {
     console.error("Failed to send OTP:", error);
-    // Local PHP server offline; demo OTP is still shown on screen.
   }
 };
 
@@ -204,18 +159,14 @@ function OtpVerifier({
   };
 
   return (
-    <div className="animate-fade-up">
-      <div className="mb-5 flex items-center gap-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4">
-        {channel === "email" ? <MailCheck className="h-6 w-6 shrink-0 text-emerald-200" /> : <Smartphone className="h-6 w-6 shrink-0 text-emerald-200" />}
-        <p className="text-sm leading-6 text-emerald-100">
-          A 6-digit OTP was sent to <span className="font-bold">{destination}</span> from the {BRAND} local PHP server.
-        </p>
+    <div className="bg-white rounded-[18px] border border-slate-200 p-4 shadow-sm">
+      <div className="flex items-center gap-2 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-sm mb-3">
+        {channel === "email" ? <MailCheck className="h-5 w-5" /> : <Smartphone className="h-5 w-5" />}
+        <span>OTP sent to <b>{destination}</b></span>
       </div>
-      <div className="mb-5 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100">
-        <span className="font-bold uppercase tracking-[0.18em]">Demo mode:</span> your OTP is{" "}
-        <span className="font-mono text-lg font-black tracking-[0.3em] text-white">{expected}</span>
-        <br />
-        In production this is delivered by Firebase Phone Auth or SMS gateway services and never shown here.
+      <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+        <b>Demo OTP:</b> <span className="font-mono text-lg font-black tracking-widest">{expected}</span>
+        <br/>In production this is sent via SMS and never shown here.
       </div>
       <Field label="Enter the 6-digit OTP">
         <input
@@ -223,16 +174,16 @@ function OtpVerifier({
           inputMode="numeric"
           maxLength={6}
           onChange={(event) => setEntered(event.target.value.replace(/\D/g, "").slice(0, 6))}
-          className={`${inputClasses} text-center font-mono text-2xl font-black tracking-[0.6em]`}
+          className={mInput + " text-center font-mono text-2xl tracking-widest"}
           placeholder="••••••"
           disabled={attempts >= 5}
         />
       </Field>
-      {error && <p className="mt-3 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+      {error && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
       <button
         onClick={handleVerify}
         disabled={entered.length !== 6 || attempts >= 5}
-        className="mt-4 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+        className={mBtnPrimary + " mt-3"}
       >
         Verify OTP
       </button>
@@ -245,17 +196,17 @@ function OtpVerifier({
           setAttempts(0);
           void dispatchOtp(destination, otp, channel);
         }}
-        className="mt-3 w-full rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/40 hover:text-white"
+        className={mBtnGhost + " mt-2"}
       >
         Resend OTP
       </button>
-      <p className="mt-4 text-xs leading-5 text-slate-500">{onResendNote}</p>
+      <p className="mt-3 text-xs text-slate-500">{onResendNote}</p>
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Registration                                                        */
+/* Registration - LOGIC UNCHANGED                                     */
 /* ------------------------------------------------------------------ */
 
 export function RegisterScreen({
@@ -277,22 +228,10 @@ export function RegisterScreen({
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     const cleanPhone = phone.replace(/[^\d+]/g, "");
-    if (!name.trim()) {
-      setError("Please enter your name.");
-      return;
-    }
-    if (cleanPhone.length < 10) {
-      setError("Please enter a valid phone number.");
-      return;
-    }
-    if (issues.length > 0) {
-      setError("Your password does not meet the security requirements yet.");
-      return;
-    }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
-      return;
-    }
+    if (!name.trim()) { setError("Please enter your name."); return; }
+    if (cleanPhone.length < 10) { setError("Please enter a valid phone number."); return; }
+    if (issues.length > 0) { setError("Your password does not meet the security requirements yet."); return; }
+    if (password !== confirm) { setError("Passwords do not match."); return; }
     setError("");
     setStep("otp");
   };
@@ -301,115 +240,65 @@ export function RegisterScreen({
     <AuthShell
       title="Create account"
       headline="Register securely."
-      subtitle="Use your phone number only and verify it with a system-generated OTP. Every registration is reported to the platform owner."
+      subtitle="Phone OTP verification. Every registration is reported to the platform owner."
       onBack={onBack}
     >
-      <div className="grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <div className="rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
-          <div className="mb-8 flex items-center gap-3">
-            <UserPlus className="h-6 w-6 text-cyan-200" />
+      {step === "form" ? (
+        <div className="bg-white rounded-[18px] border border-slate-200 p-4 shadow-sm">
+          <div className="flex items-center gap-2 mb-4 text-slate-800 font-bold">
+            <UserPlus className="h-5 w-5 text-[#e53935]" /> New player registration
+          </div>
+          <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <h2 className="text-2xl font-bold text-white">New player registration</h2>
-              <p className="text-sm text-slate-400">Password is salted &amp; hashed — never stored in plain text</p>
+              <label className="text-xs text-slate-500">Full name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} className={mInput} placeholder="Your name" autoComplete="name" />
             </div>
-          </div>
-
-          {step === "form" ? (
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-5">
-                <Field label="Full name">
-                  <input
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className={inputClasses}
-                    placeholder="Your name"
-                    autoComplete="name"
-                  />
-                </Field>
-                <Field label="Phone number">
-                  <input
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className={inputClasses}
-                    placeholder="+91 98765 43210"
-                    autoComplete="tel"
-                  />
-                </Field>
-                <Field label="Password">
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className={inputClasses}
-                    placeholder="Create a strong password"
-                    autoComplete="new-password"
-                  />
-                </Field>
-                {password && (
-                  <div className="grid grid-cols-2 gap-2">
-                    {["At least 8 characters", "One uppercase letter", "One lowercase letter", "One number"].map((rule) => {
-                      const met = !issues.includes(rule);
-                      return (
-                        <span
-                          key={rule}
-                          className={`rounded-xl border px-3 py-2 text-xs font-semibold ${met ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-white/10 bg-slate-950/60 text-slate-500"}`}
-                        >
-                          {met ? "✓" : "•"} {rule}
-                        </span>
-                      );
-                    })}
-                  </div>
-                )}
-                <Field label="Confirm password">
-                  <input
-                    type="password"
-                    value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    className={`${inputClasses} ${confirm && confirm !== password ? "border-red-400/60" : ""}`}
-                    placeholder="Repeat the password"
-                    autoComplete="new-password"
-                  />
-                </Field>
+            <div>
+              <label className="text-xs text-slate-500">Phone number</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} className={mInput} placeholder="+91 98765 43210" autoComplete="tel" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500">Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={mInput} placeholder="Create a strong password" autoComplete="new-password" />
+            </div>
+            {password && (
+              <div className="grid grid-cols-2 gap-2 text-[11px]">
+                {["At least 8 characters", "One uppercase letter", "One lowercase letter", "One number"].map((rule) => {
+                  const met = !issues.includes(rule);
+                  return (
+                    <span key={rule} className={`rounded-lg border px-2 py-1.5 font-semibold ${met ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-500"}`}>
+                      {met ? "✓" : "•"} {rule}
+                    </span>
+                  );
+                })}
               </div>
-              {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-              <button
-                type="submit"
-                className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white"
-              >
-                Send OTP &amp; verify
-              </button>
-            </form>
-          ) : (
-            <OtpVerifier
-              destination={phone}
-              channel="sms"
-              onVerified={() => onRegistered(name.trim(), phone.replace(/[^\d+]/g, ""), password)}
-              onResendNote={`On success, your registration details are forwarded to the platform operations team and a locked ${BRAND} User ID is generated.`}
-            />
-          )}
+            )}
+            <div>
+              <label className="text-xs text-slate-500">Confirm password</label>
+              <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={mInput + (confirm && confirm !== password ? " !border-red-400" : "")} placeholder="Repeat the password" autoComplete="new-password" />
+            </div>
+            {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+            <button type="submit" className={mBtnPrimary}>Send OTP &amp; verify</button>
+          </form>
         </div>
-
-        <div className="flex flex-col justify-between rounded-[2rem] border border-cyan-300/20 bg-cyan-300/[0.06] p-6">
-          <div>
-            <ShieldCheck className="mb-5 h-9 w-9 text-cyan-200" />
-            <h3 className="text-3xl font-black tracking-[-0.05em] text-white">One identity. Fully audited.</h3>
-            <p className="mt-4 leading-7 text-slate-300">
-              Every new registration is OTP verified and reported live to the platform operations team.
-              Your unique User ID locks together your wallet, bets, deposits, and withdrawals.
-            </p>
-          </div>
-          <ul className="mt-8 space-y-3 text-sm leading-6 text-slate-300">
-            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Free phone OTP: Firebase Phone Auth free tier.</li>
-            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Secure wallet — deposit anytime to start betting.</li>
-          </ul>
-        </div>
+      ) : (
+        <OtpVerifier
+          destination={phone}
+          channel="sms"
+          onVerified={() => onRegistered(name.trim(), phone.replace(/[^\d+]/g, ""), password)}
+          onResendNote={`On success, your registration is forwarded to operations and a locked ${BRAND} User ID is generated.`}
+        />
+      )}
+      <div className="mt-3 bg-white rounded-[18px] border border-slate-200 p-4 text-sm text-slate-600 shadow-sm">
+        <div className="flex items-center gap-2 font-bold text-slate-800 mb-1"><ShieldCheck className="h-5 w-5 text-[#e53935]" /> One identity. Fully audited.</div>
+        OTP verified · Secure wallet · Salted password hashes
       </div>
     </AuthShell>
   );
 }
 
 /* ------------------------------------------------------------------ */
-/* Player login                                                        */
+/* Player login - LOGIC UNCHANGED                                     */
 /* ------------------------------------------------------------------ */
 
 export function LoginScreen({
@@ -419,7 +308,6 @@ export function LoginScreen({
 }: {
   onBack: () => void;
   onRegisterInstead: () => void;
-  /** Verifies phone + password. Returns an error message, or null on success. */
   onLogin: (phone: string, password: string) => Promise<string | null>;
 }) {
   const [phone, setPhone] = useState("");
@@ -430,17 +318,9 @@ export function LoginScreen({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busy) return;
-
     const cleanPhone = phone.replace(/[^\d+]/g, "");
-    if (!cleanPhone) {
-      setError("Please enter your phone number.");
-      return;
-    }
-    if (!password) {
-      setError("Please enter your password.");
-      return;
-    }
-
+    if (!cleanPhone) { setError("Please enter your phone number."); return; }
+    if (!password) { setError("Please enter your password."); return; }
     setBusy(true);
     const result = await onLogin(cleanPhone, password);
     setBusy(false);
@@ -451,58 +331,25 @@ export function LoginScreen({
     <AuthShell
       title="Player login"
       headline="Welcome back."
-      subtitle="Sign in with your phone number and password. Five failed attempts lock the account for five minutes to block brute-force attacks."
+      subtitle="Sign in with phone + password. 5 failed attempts = 5 min lockout."
       onBack={onBack}
     >
-      <div className="mx-auto max-w-xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl">
-        <div className="mb-8 flex items-center gap-3">
-          <UserRound className="h-6 w-6 text-cyan-200" />
-          <div>
-            <h2 className="text-2xl font-bold text-white">Secure login</h2>
-            <p className="text-sm text-slate-400">Salted password hashes · brute-force lockout</p>
-          </div>
+      <div className="bg-white rounded-[18px] border border-slate-200 p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3 font-bold text-slate-800">
+          <UserRound className="h-5 w-5 text-[#e53935]" /> Secure login
         </div>
-
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-5">
-            <Field label="Registered phone number">
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className={inputClasses}
-                placeholder="+91 98765 43210"
-                autoComplete="tel"
-                disabled={busy}
-              />
-            </Field>
-            <Field label="Password">
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={inputClasses}
-                placeholder="Your password"
-                autoComplete="current-password"
-                disabled={busy}
-              />
-            </Field>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="text-xs text-slate-500">Registered phone</label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} className={mInput} placeholder="+91 98765 43210" autoComplete="tel" disabled={busy} />
           </div>
-          {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-6 w-full rounded-2xl bg-cyan-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-          >
-            {busy ? "Checking…" : "Login"}
-          </button>
-          <button
-            type="button"
-            onClick={onRegisterInstead}
-            disabled={busy}
-            className="mt-3 w-full rounded-2xl border border-white/10 px-5 py-3 text-sm font-semibold text-slate-300 transition hover:border-white/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            New here? Create an account
-          </button>
+          <div>
+            <label className="text-xs text-slate-500">Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className={mInput} placeholder="Your password" autoComplete="current-password" disabled={busy} />
+          </div>
+          {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+          <button type="submit" disabled={busy} className={mBtnPrimary}>{busy ? "Checking…" : "Login"}</button>
+          <button type="button" onClick={onRegisterInstead} disabled={busy} className={mBtnGhost}>New here? Create an account</button>
         </form>
       </div>
     </AuthShell>
@@ -510,7 +357,7 @@ export function LoginScreen({
 }
 
 /* ------------------------------------------------------------------ */
-/* Admin login                                                         */
+/* Admin login - LOGIC UNCHANGED                                      */
 /* ------------------------------------------------------------------ */
 
 export function AdminLogin({
@@ -528,72 +375,37 @@ export function AdminLogin({
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (busy) return;
-
-    if (!adminId.trim() || !password.trim()) {
-      setError("Admin ID and password are required.");
-      return;
-    }
-
+    if (!adminId.trim() || !password.trim()) { setError("Admin ID and password are required."); return; }
     setBusy(true);
     const success = await onLogin(adminId, password);
     setBusy(false);
-
-    if (!success) {
-      setError("Invalid admin credentials on local PHP server.");
-    }
+    if (!success) { setError("Invalid admin credentials on local PHP server."); }
   };
 
   return (
     <AuthShell
       title="Admin access"
       headline="Operations control."
-      subtitle="Fully isolated login for the platform owner: live users, live bets, deposits, withdrawals, and support tickets."
+      subtitle="Live users, bets, deposits, withdrawals, and tickets."
       onBack={onBack}
     >
-      <form
-        onSubmit={handleSubmit}
-        className="mx-auto max-w-xl rounded-[2rem] border border-violet-300/20 bg-white/[0.05] p-6 shadow-2xl shadow-black/40 backdrop-blur-xl"
-      >
-        <div className="mb-8 flex items-center gap-3">
-          <Shield className="h-7 w-7 text-violet-200" />
+      <form onSubmit={handleSubmit} className="bg-white rounded-[18px] border border-slate-200 p-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3 font-bold text-slate-800">
+          <Shield className="h-5 w-5 text-[#e53935]" /> Admin login
+        </div>
+        <div className="space-y-3">
           <div>
-            <h2 className="text-2xl font-bold text-white">Admin login</h2>
-            <p className="text-sm text-slate-400">Local PHP route: /php-server/admin-login.php</p>
+            <label className="text-xs text-slate-500">Admin ID</label>
+            <input value={adminId} placeholder="admin" onChange={(e) => setAdminId(e.target.value)} className={mInput} disabled={busy} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500">Password</label>
+            <input value={password} type="password" placeholder="Enter admin password" onChange={(e) => setPassword(e.target.value)} className={mInput} disabled={busy} />
           </div>
         </div>
-        <div className="space-y-5">
-          <Field label="Admin ID">
-            <input
-              value={adminId}
-              placeholder="admin"
-              onChange={(e) => setAdminId(e.target.value)}
-              className={`${inputClasses} focus:border-violet-300/70`}
-              disabled={busy}
-            />
-          </Field>
-          <Field label="Password">
-            <input
-              value={password}
-              type="password"
-              placeholder="Enter admin password"
-              onChange={(e) => setPassword(e.target.value)}
-              className={`${inputClasses} focus:border-violet-300/70`}
-              disabled={busy}
-            />
-          </Field>
-        </div>
-        {error && <p className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</p>}
-        <button
-          type="submit"
-          disabled={busy}
-          className="mt-6 w-full rounded-2xl bg-violet-300 px-5 py-4 text-sm font-black uppercase tracking-[0.2em] text-slate-950 transition hover:bg-white disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-        >
-          {busy ? "Checking…" : "Unlock admin panel"}
-        </button>
-        <p className="mt-5 flex items-center gap-2 text-sm leading-6 text-slate-400">
-          <LockKeyhole className="h-4 w-4 shrink-0" />
-          Separate session namespace. Never linked from the player application.
-        </p>
+        {error && <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+        <button type="submit" disabled={busy} className={mBtnPrimary + " mt-3"}>{busy ? "Checking…" : "Unlock admin panel"}</button>
+        <p className="mt-3 flex items-center gap-2 text-xs text-slate-500"><LockKeyhole className="h-4 w-4" /> Separate session namespace.</p>
       </form>
     </AuthShell>
   );
