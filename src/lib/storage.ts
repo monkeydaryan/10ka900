@@ -1,10 +1,10 @@
 import { db } from "@/firebase/config";
 import {
+  collection,
   doc,
   getDoc,
-  setDoc,
   onSnapshot,
-  collection,
+  setDoc,
 } from "firebase/firestore";
 
 export const K = {
@@ -20,8 +20,11 @@ export const K = {
   loginGuard: "m90x_login_guard_v1",
 } as const;
 
-// Keys that stay in localStorage (session/security only)
 const LOCAL_ONLY_KEYS = new Set<string>([K.currentUser, K.loginGuard]);
+
+const memoryCache: Record<string, unknown> = {};
+const initialized: Record<string, boolean> = {};
+const loadPromises: Record<string, Promise<void>> = {};
 
 const localRead = <T,>(key: string, fallback: T): T => {
   try {
@@ -36,71 +39,89 @@ const localWrite = <T,>(key: string, value: T) => {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* ignore */
+    // ignore
   }
 };
 
 const localRemove = (key: string) => {
-  window.localStorage.removeItem(key);
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
 };
 
-const memoryCache: Record<string, any> = {};
-const initialized: Record<string, boolean> = {};
+async function loadFromFirestore<T>(key: string, fallback: T) {
+  try {
+    const ref = doc(db, "app_data", key);
+    const snap = await getDoc(ref);
+
+    if (snap.exists()) {
+      const data = snap.data().value;
+      memoryCache[key] = data !== null && data !== undefined ? data : fallback;
+    } else {
+      memoryCache[key] = fallback;
+      // Initialize the document so future writes can update it
+      await setDoc(ref, { value: fallback, updatedAt: Date.now() });
+    }
+
+    window.dispatchEvent(new Event("firebase-sync"));
+  } catch (error) {
+    console.error(`Firebase read failed for ${key}:`, error);
+    memoryCache[key] = fallback;
+  }
+}
+
+async function writeToFirestore<T>(key: string, value: T) {
+  try {
+    const ref = doc(db, "app_data", key);
+    await setDoc(ref, {
+      value,
+      updatedAt: Date.now(),
+    });
+    console.log(`✅ Firebase write success: ${key}`, value);
+  } catch (error) {
+    console.error(`❌ Firebase write failed for ${key}:`, error);
+  }
+}
 
 export const readStorage = <T,>(key: string, fallback: T): T => {
   if (LOCAL_ONLY_KEYS.has(key)) {
     return localRead(key, fallback);
   }
-  if (key in memoryCache) {
+
+  if (Object.prototype.hasOwnProperty.call(memoryCache, key)) {
     return memoryCache[key] as T;
   }
+
   if (!initialized[key]) {
     initialized[key] = true;
-    void loadFromFirestore(key, fallback);
+    loadPromises[key] = loadFromFirestore(key, fallback);
   }
+
   return fallback;
 };
-
-async function loadFromFirestore<T>(key: string, fallback: T) {
-  try {
-    const docRef = doc(db, "app_data", key);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      memoryCache[key] = snap.data().value ?? fallback;
-    } else {
-      memoryCache[key] = fallback;
-    }
-    window.dispatchEvent(new Event("firebase-sync"));
-  } catch (err) {
-    console.error(`Failed to load ${key} from Firestore:`, err);
-    memoryCache[key] = fallback;
-  }
-}
 
 export const writeStorage = <T,>(key: string, value: T) => {
   if (LOCAL_ONLY_KEYS.has(key)) {
     localWrite(key, value);
     return;
   }
+
+  // Update cache immediately
   memoryCache[key] = value;
+
+  // Always write to Firestore (even if cache wasn't ready)
   void writeToFirestore(key, value);
 };
-
-async function writeToFirestore<T>(key: string, value: T) {
-  try {
-    const docRef = doc(db, "app_data", key);
-    await setDoc(docRef, { value, updatedAt: Date.now() });
-  } catch (err) {
-    console.error(`Failed to write ${key} to Firestore:`, err);
-  }
-}
 
 export const removeStorage = (key: string) => {
   if (LOCAL_ONLY_KEYS.has(key)) {
     localRemove(key);
     return;
   }
-  delete memoryCache[key];
+
+  memoryCache[key] = null;
   void writeToFirestore(key, null);
 };
 
@@ -108,20 +129,40 @@ export const stable = <T,>(prev: T, next: T): T =>
   JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
 
 export function startFirebaseSync() {
-  const collRef = collection(db, "app_data");
-  return onSnapshot(collRef, (snapshot) => {
-    let changed = false;
-    snapshot.docChanges().forEach((change) => {
-      const key = change.doc.id;
-      if (LOCAL_ONLY_KEYS.has(key)) return;
-      const newValue = change.doc.data().value;
-      if (JSON.stringify(memoryCache[key]) !== JSON.stringify(newValue)) {
-        memoryCache[key] = newValue;
-        changed = true;
+  const ref = collection(db, "app_data");
+
+  return onSnapshot(
+    ref,
+    (snapshot) => {
+      let changed = false;
+
+      snapshot.docChanges().forEach((change) => {
+        const key = change.doc.id;
+
+        if (LOCAL_ONLY_KEYS.has(key)) return;
+
+        const value = change.doc.data().value;
+
+        if (JSON.stringify(memoryCache[key]) !== JSON.stringify(value)) {
+          memoryCache[key] = value;
+          changed = true;
+          console.log(`🔄 Firebase sync update: ${key}`, value);
+        }
+      });
+
+      if (changed) {
+        window.dispatchEvent(new Event("firebase-sync"));
       }
-    });
-    if (changed) {
-      window.dispatchEvent(new Event("firebase-sync"));
-    }
-  });
+    },
+    (error) => {
+      console.error("Firebase realtime sync failed:", error);
+    },
+  );
+}
+
+/** Pre-loads all collections at app startup so they're ready before use. */
+export async function preloadAllData() {
+  const keys = [K.users, K.bets, K.deposits, K.withdrawals, K.tickets, K.markets, K.events, K.adminAuth];
+  await Promise.all(keys.map((key) => loadFromFirestore(key, [])));
+  console.log("✅ All Firebase data preloaded");
 }

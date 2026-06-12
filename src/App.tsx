@@ -36,7 +36,7 @@ import type {
   UserProfile,
   WithdrawRequest,
 } from "@/lib/types";
-import { K, readStorage, removeStorage, stable, writeStorage, startFirebaseSync } from "@/lib/storage";
+import { K, readStorage, removeStorage, stable, writeStorage, startFirebaseSync, preloadAllData } from "@/lib/storage";
 import { AdminLogin, Landing, LoginScreen, RegisterScreen } from "@/components/Auth";
 import { Dashboard } from "@/components/Dashboard";
 import type { UserTab, WithdrawForm } from "@/components/Dashboard";
@@ -60,28 +60,44 @@ export default function App() {
   const [deposits, setDeposits] = useState<DepositRequest[]>(() => readStorage(K.deposits, []));
   const [withdrawals, setWithdrawals] = useState<WithdrawRequest[]>(() => readStorage(K.withdrawals, []));
   const [tickets, setTickets] = useState<SupportTicket[]>(() => readStorage(K.tickets, []));
-  const [markets, setMarkets] = useState<Market[]>(() => readStorage(K.markets, initialMarkets));
+  const [markets, setMarkets] = useState<Market[]>(() => {
+    const stored = readStorage<Market[]>(K.markets, initialMarkets);
+    return Array.isArray(stored) && stored.length > 0 ? stored : initialMarkets;
+  });
   const [events, setEvents] = useState<ActivityEvent[]>(() => readStorage(K.events, []));
   const [activeTab, setActiveTab] = useState<UserTab>("hsi");
 
   /* ------------------------------------------------------------ */
   /* Live sync: cross-tab storage events + polling for admin views */
   /* ------------------------------------------------------------ */
-useEffect(() => {
+  useEffect(() => {
     const sync = () => {
       setUsers((prev) => stable(prev, readStorage(K.users, prev)));
       setBets((prev) => stable(prev, readStorage(K.bets, prev)));
       setDeposits((prev) => stable(prev, readStorage(K.deposits, prev)));
       setWithdrawals((prev) => stable(prev, readStorage(K.withdrawals, prev)));
       setTickets((prev) => stable(prev, readStorage(K.tickets, prev)));
-      setMarkets((prev) => stable(prev, readStorage(K.markets, prev)));
+      setMarkets((prev) => {
+        const fromStorage = readStorage<Market[]>(K.markets, prev);
+        // Never overwrite with empty/invalid data
+        const valid = Array.isArray(fromStorage) && fromStorage.length > 0 ? fromStorage : initialMarkets;
+        return stable(prev, valid);
+      });
       setEvents((prev) => stable(prev, readStorage(K.events, prev)));
       setCurrentUser((prev) => stable(prev, readStorage<UserProfile | null>(K.currentUser, prev)));
     };
+
     window.addEventListener("firebase-sync", sync);
     window.addEventListener("storage", sync);
+
+    // Preload all data first, then start realtime sync
+    void preloadAllData().then(() => {
+      sync(); // Run once after preload completes
+    });
+
     const unsubscribe = startFirebaseSync();
     const interval = window.setInterval(sync, 3000);
+
     return () => {
       window.removeEventListener("firebase-sync", sync);
       window.removeEventListener("storage", sync);
@@ -89,6 +105,17 @@ useEffect(() => {
       unsubscribe();
     };
   }, []);
+
+  /* ------------------------------------------------------------ */
+  /* Ensure markets are never empty                                 */
+  /* ------------------------------------------------------------ */
+  useEffect(() => {
+    if (!Array.isArray(markets) || markets.length === 0) {
+      console.log("⚠️ Markets empty, restoring defaults...");
+      setMarkets(initialMarkets);
+      writeStorage(K.markets, initialMarkets);
+    }
+  }, [markets]);
 
   /* ------------------------------------------------------------ */
   /* Persistence helpers                                            */
