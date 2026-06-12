@@ -400,7 +400,7 @@ export function RegisterScreen({
           </div>
           <ul className="mt-8 space-y-3 text-sm leading-6 text-slate-300">
             <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Free phone OTP: Firebase Phone Auth free tier.</li>
-            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Welcome bonus: 2,500 starting credits.</li>
+            <li className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">Secure wallet — deposit anytime to start betting.</li>
           </ul>
         </div>
       </div>

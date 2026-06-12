@@ -178,7 +178,7 @@ useEffect(() => {
       name,
       email: "",
       phone,
-      wallet: 2500,
+      wallet: 0,
       createdAt: new Date().toISOString(),
       salt,
       passwordHash,
