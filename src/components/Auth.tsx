@@ -1,14 +1,12 @@
-// MARKET 90XX - Auth.tsx - 91 Club Mobile UI Reskin
-// Game/auth logic is 100% untouched - only UI changed
-// Drop-in replacement for src/components/Auth.tsx
+// MARKET 90XX - Auth.tsx - 91 Club Mobile UI Reskin with Referral System
+// Game/auth logic preserved - added referral input on registration
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Activity, LockKeyhole, MailCheck, Shield, ShieldCheck, Smartphone, UserPlus, UserRound } from "lucide-react";
+import { Activity, LockKeyhole, MailCheck, Shield, ShieldCheck, Smartphone, UserPlus, UserRound, Gift } from "lucide-react";
 import { API_BASE, BRAND, MAX_DOUBLE_BET, MIN_DEPOSIT, MIN_WITHDRAW, generateOtp, passwordIssues } from "@/lib/types";
 import { Field } from "@/components/ui";
 
-// Simple mobile input style to match Dashboard.91club.tsx
 const mInput = "w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-[15px] outline-none focus:border-[#e53935]";
 const mBtnPrimary = "w-full rounded-xl bg-[#e53935] px-4 py-3.5 text-sm font-black text-white hover:bg-[#c62828] transition disabled:bg-slate-300 disabled:text-slate-500";
 const mBtnGhost = "w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50";
@@ -46,6 +44,9 @@ export function Landing({
             <p className="mt-3 text-white/90 text-[14px] leading-relaxed">
               Wager on the exact closing decimals. OTP-secured, instant payouts, admin-verified wallet.
             </p>
+            <div className="mt-3 bg-white/20 rounded-xl px-3 py-2 text-[12px]">
+              🎁 <b>Refer friends, earn ₹50 each!</b>
+            </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
@@ -109,7 +110,7 @@ export function AuthShell({
 }
 
 /* ------------------------------------------------------------------ */
-/* OTP helper - LOGIC UNCHANGED                                       */
+/* OTP helper                                                         */
 /* ------------------------------------------------------------------ */
 
 const dispatchOtp = async (destination: string, otp: string, channel: "email" | "sms") => {
@@ -206,7 +207,7 @@ function OtpVerifier({
 }
 
 /* ------------------------------------------------------------------ */
-/* Registration - LOGIC UNCHANGED                                     */
+/* Registration - WITH REFERRAL CODE INPUT                            */
 /* ------------------------------------------------------------------ */
 
 export function RegisterScreen({
@@ -214,14 +215,24 @@ export function RegisterScreen({
   onRegistered,
 }: {
   onBack: () => void;
-  onRegistered: (name: string, phone: string, password: string) => void;
+  onRegistered: (name: string, phone: string, password: string, referralCode?: string) => void;
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [referralCode, setReferralCode] = useState("");
   const [step, setStep] = useState<"form" | "otp">("form");
   const [error, setError] = useState("");
+
+  // Auto-fill referral code from URL ?ref=CODE
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const refFromUrl = params.get("ref");
+    if (refFromUrl) {
+      setReferralCode(refFromUrl.toUpperCase());
+    }
+  }, []);
 
   const issues = passwordIssues(password);
 
@@ -277,6 +288,27 @@ export function RegisterScreen({
               <label className="text-xs text-slate-500">Confirm password</label>
               <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className={mInput + (confirm && confirm !== password ? " !border-red-400" : "")} placeholder="Repeat the password" autoComplete="new-password" />
             </div>
+
+            {/* NEW: Referral code field */}
+            <div className="border-t border-slate-200 pt-3 mt-3">
+              <label className="text-xs text-slate-500 flex items-center gap-1">
+                <Gift className="h-3.5 w-3.5 text-[#e53935]" />
+                Referral code <span className="text-slate-400">(optional)</span>
+              </label>
+              <input 
+                value={referralCode} 
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))} 
+                className={mInput + " font-mono uppercase"} 
+                placeholder="Enter friend's code" 
+                maxLength={10}
+              />
+              {referralCode && (
+                <p className="mt-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5">
+                  ✓ Your friend will earn ₹50 when you join!
+                </p>
+              )}
+            </div>
+
             {error && <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
             <button type="submit" className={mBtnPrimary}>Send OTP &amp; verify</button>
           </form>
@@ -285,7 +317,7 @@ export function RegisterScreen({
         <OtpVerifier
           destination={phone}
           channel="sms"
-          onVerified={() => onRegistered(name.trim(), phone.replace(/[^\d+]/g, ""), password)}
+          onVerified={() => onRegistered(name.trim(), phone.replace(/[^\d+]/g, ""), password, referralCode.trim() || undefined)}
           onResendNote={`On success, your registration is forwarded to operations and a locked ${BRAND} User ID is generated.`}
         />
       )}
@@ -298,7 +330,7 @@ export function RegisterScreen({
 }
 
 /* ------------------------------------------------------------------ */
-/* Player login - LOGIC UNCHANGED                                     */
+/* Player login - UNCHANGED                                           */
 /* ------------------------------------------------------------------ */
 
 export function LoginScreen({
@@ -357,7 +389,7 @@ export function LoginScreen({
 }
 
 /* ------------------------------------------------------------------ */
-/* Admin login - LOGIC UNCHANGED                                      */
+/* Admin login - UNCHANGED                                            */
 /* ------------------------------------------------------------------ */
 
 export function AdminLogin({

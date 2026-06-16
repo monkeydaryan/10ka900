@@ -19,7 +19,6 @@ export interface Market {
   resultDecimal: string;
   change: number;
   history: string[];
-  /** Betting cutoff, minutes since midnight local time. Bets stop at this time. */
   cutoffMinutes: number;
   cutoffLabel: string;
 }
@@ -31,10 +30,24 @@ export interface UserProfile {
   phone: string;
   wallet: number;
   createdAt: string;
-  /** Random per-user salt — passwords are never stored in plain text. */
   salt: string;
-  /** SHA-256 hash of salt:password computed with the Web Crypto API. */
   passwordHash: string;
+  // NEW: Referral fields
+  referralCode: string;
+  referredBy?: string;
+  referralEarnings: number;
+  referralCount: number;
+  pendingReferralEarnings: number;
+}
+
+// NEW: Referral request type
+export interface ReferralClaim {
+  id: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  status: RequestStatus;
+  createdAt: string;
 }
 
 export interface Bet {
@@ -92,7 +105,7 @@ export interface SupportTicket {
 
 export interface ActivityEvent {
   id: string;
-  type: "registration" | "login" | "bet" | "deposit" | "withdraw" | "support";
+  type: "registration" | "login" | "bet" | "deposit" | "withdraw" | "support" | "referral";
   title: string;
   detail: string;
   at: string;
@@ -106,6 +119,10 @@ export const MAX_DOUBLE_BET = 500;
 export const OWNER_EMAIL = "gillparamveer24@gmail.com";
 export const API_BASE = "http://localhost:8080";
 export const BRAND = "Market 90x";
+
+// NEW: Referral constants
+export const REFERRAL_BONUS = 50; // ₹50 per referral
+export const MIN_REFERRAL_CLAIM = 100; // Minimum ₹100 to claim
 
 export const initialMarkets: Market[] = [
   {
@@ -212,15 +229,19 @@ export const createId = (prefix: string) =>
 export const createUserId = () =>
   `M90-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36).toUpperCase().padStart(7, "0")}`;
 
-/** Minutes since local midnight for a given date. */
+// NEW: Generate referral code
+export const createReferralCode = (name: string): string => {
+  const cleanName = name.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 4) || "USER";
+  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${cleanName}${random}`;
+};
+
 export const minutesOfDay = (date: Date) =>
   date.getHours() * 60 + date.getMinutes() + date.getSeconds() / 60;
 
-/** Betting is allowed only before the market's cutoff time and while the market is open. */
 export const isBettingOpen = (market: Market, now: Date) =>
   market.status === "open" && minutesOfDay(now) < market.cutoffMinutes;
 
-/** Time remaining until the market's betting cutoff, formatted hh:mm:ss. Empty when passed. */
 export const timeUntilCutoff = (market: Market, now: Date) => {
   const remainingSeconds = Math.floor(
     (market.cutoffMinutes - minutesOfDay(now)) * 60
@@ -232,22 +253,13 @@ export const timeUntilCutoff = (market: Market, now: Date) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
-// ─── THE FIX ──────────────────────────────────────────────────────────────────
-// Before: value.toLocaleString() → crashes when value is undefined/null/NaN
-// After:  always coerce to a safe finite number first
 export const formatCredits = (value: number | undefined | null): string => {
-  // Coerce to number, replace any non-finite result (NaN, Infinity) with 0
   const safeValue = Number.isFinite(Number(value)) ? Number(value) : 0;
   return `${safeValue.toLocaleString("en-US")} CR`;
 };
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const generateOtp = () =>
   String(Math.floor(100000 + Math.random() * 900000));
-
-/* ------------------------------------------------------------------ */
-/* Password security (Web Crypto API — no plaintext ever stored)       */
-/* ------------------------------------------------------------------ */
 
 export const createSalt = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)))
@@ -265,7 +277,6 @@ export const hashPassword = async (
     .join("");
 };
 
-/** Returns a list of unmet password requirements (empty = strong enough). */
 export const passwordIssues = (password: string): string[] => {
   const issues: string[] = [];
   if (password.length < 8) issues.push("At least 8 characters");
@@ -280,15 +291,10 @@ export const LOCKOUT_MINUTES = 5;
 export const DEFAULT_ADMIN_PASSWORD = "ChangeMe123!";
 
 export const timeAgo = (iso: string) => {
-  // Guard against invalid input
   if (!iso) return "just now";
   const date = new Date(iso);
   if (isNaN(date.getTime())) return "just now";
-
-  const seconds = Math.max(
-    0,
-    Math.floor((Date.now() - date.getTime()) / 1000)
-  );
+  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
   if (seconds < 10) return "just now";
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
@@ -299,19 +305,13 @@ export const timeAgo = (iso: string) => {
 };
 
 export const getMarketStatusClasses = (status: MarketState) => {
-  if (status === "open")
-    return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
-  if (status === "locked")
-    return "border-amber-400/40 bg-amber-400/10 text-amber-200";
+  if (status === "open") return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
+  if (status === "locked") return "border-amber-400/40 bg-amber-400/10 text-amber-200";
   return "border-sky-400/40 bg-sky-400/10 text-sky-200";
 };
 
-export const getRequestStatusClasses = (
-  status: RequestStatus | TicketStatus
-) => {
-  if (status === "approved" || status === "resolved")
-    return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
-  if (status === "rejected")
-    return "border-red-400/40 bg-red-400/10 text-red-200";
+export const getRequestStatusClasses = (status: RequestStatus | TicketStatus) => {
+  if (status === "approved" || status === "resolved") return "border-emerald-400/40 bg-emerald-400/10 text-emerald-200";
+  if (status === "rejected") return "border-red-400/40 bg-red-400/10 text-red-200";
   return "border-amber-400/40 bg-amber-400/10 text-amber-200";
 };

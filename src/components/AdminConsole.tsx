@@ -1,4 +1,4 @@
-// MARKET 90XX - AdminConsole.tsx - 91 Club Mobile UI Reskin
+// MARKET 90XX - AdminConsole.tsx - 91 Club Mobile UI Reskin with Referral System
 // Game/admin logic is 100% untouched - only UI/UX changed
 // Drop-in replacement for src/components/AdminConsole.tsx
 
@@ -6,6 +6,7 @@ import { useMemo, useState, Fragment } from "react";
 import type { ReactNode } from "react";
 import {
   Banknote,
+  Gift,
   Headset,
   KeyRound,
   Landmark,
@@ -31,6 +32,7 @@ import type {
   DepositRequest,
   Market,
   MarketId,
+  ReferralClaim,
   SupportTicket,
   UserProfile,
   WithdrawRequest,
@@ -38,7 +40,7 @@ import type {
 
 import { PasswordChangeForm } from "@/components/ui";
 
-// --- Safe helpers - unchanged ---
+// --- Safe helpers ---
 function safeTimeAgo(date: Date | string | number | undefined | null): string {
   if (!date) return "Just now";
   try {
@@ -58,7 +60,7 @@ function safeCredits(value: unknown): string {
   return formatCredits(safeNum(value));
 }
 
-// --- Light UI primitives (match Dashboard.91club.tsx) ---
+// --- Light UI primitives ---
 const card = "bg-white rounded-[18px] border border-slate-200 p-4 shadow-sm";
 const h2 = "text-xl font-black text-slate-900";
 const sub = "text-sm text-slate-500 mt-1";
@@ -82,6 +84,7 @@ type AdminTab =
   | "bets"
   | "deposits"
   | "withdrawals"
+  | "referrals"
   | "support"
   | "settlement"
   | "security";
@@ -92,6 +95,7 @@ export function AdminConsole({
   deposits,
   withdrawals,
   tickets,
+  referralClaims,
   events,
   markets,
   onBack,
@@ -100,6 +104,8 @@ export function AdminConsole({
   onApproveWithdraw,
   onRejectWithdraw,
   onResolveTicket,
+  onApproveReferralClaim,
+  onRejectReferralClaim,
   onSettleMarket,
   onCloseMarket,
   onOpenMarket,
@@ -111,6 +117,7 @@ export function AdminConsole({
   deposits: DepositRequest[];
   withdrawals: WithdrawRequest[];
   tickets: SupportTicket[];
+  referralClaims: ReferralClaim[];
   events: ActivityEvent[];
   markets: Market[];
   onBack: () => void;
@@ -119,6 +126,8 @@ export function AdminConsole({
   onApproveWithdraw: (id: string) => void;
   onRejectWithdraw: (id: string) => void;
   onResolveTicket: (id: string) => void;
+  onApproveReferralClaim: (id: string) => void;
+  onRejectReferralClaim: (id: string) => void;
   onSettleMarket: (marketId: MarketId, resultDecimal: string) => void;
   onCloseMarket: (marketId: MarketId) => void;
   onOpenMarket: (marketId: MarketId) => void;
@@ -136,11 +145,13 @@ export function AdminConsole({
   const safeDeposits = useMemo(() => (Array.isArray(deposits) ? deposits.filter(Boolean) : []), [deposits]);
   const safeWithdrawals = useMemo(() => (Array.isArray(withdrawals) ? withdrawals.filter(Boolean) : []), [withdrawals]);
   const safeTickets = useMemo(() => (Array.isArray(tickets) ? tickets.filter(Boolean) : []), [tickets]);
+  const safeReferralClaims = useMemo(() => (Array.isArray(referralClaims) ? referralClaims.filter(Boolean) : []), [referralClaims]);
   const safeEvents = useMemo(() => (Array.isArray(events) ? events.filter(Boolean) : []), [events]);
   const safeMarkets = useMemo(() => (Array.isArray(markets) ? markets.filter(Boolean) : []), [markets]);
 
   const pendingDeposits = safeDeposits.filter((d) => d?.status === "pending");
   const pendingWithdrawals = safeWithdrawals.filter((w) => w?.status === "pending");
+  const pendingReferralClaims = safeReferralClaims.filter((c) => c?.status === "pending");
   const openTickets = safeTickets.filter((t) => t?.status === "open");
 
   const tabs: { id: AdminTab; label: string; badge?: number }[] = [
@@ -149,6 +160,7 @@ export function AdminConsole({
     { id: "bets", label: "Bets", badge: safeBets.filter((b) => b?.status === "pending").length },
     { id: "deposits", label: "Deposits", badge: pendingDeposits.length },
     { id: "withdrawals", label: "Withdraws", badge: pendingWithdrawals.length },
+    { id: "referrals", label: "Referrals", badge: pendingReferralClaims.length },
     { id: "support", label: "Support", badge: openTickets.length },
     { id: "settlement", label: "Settlement" },
     { id: "security", label: "Security" },
@@ -168,7 +180,7 @@ export function AdminConsole({
             <button onClick={onBack} className={btnGhost + " !py-2 !px-3 text-xs"}>Exit</button>
           </div>
 
-          {/* Tab bar - horizontally scrollable */}
+          {/* Tab bar */}
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
             {tabs.map((item) => (
               <button
@@ -218,6 +230,13 @@ export function AdminConsole({
               onReject={onRejectWithdraw}
             />
           )}
+          {tab === "referrals" && (
+            <ReferralsTab
+              claims={safeReferralClaims}
+              onApprove={onApproveReferralClaim}
+              onReject={onRejectReferralClaim}
+            />
+          )}
           {tab === "support" && <SupportTab tickets={safeTickets} onResolve={onResolveTicket} />}
           {tab === "settlement" && (
             <SettlementTab
@@ -229,6 +248,104 @@ export function AdminConsole({
             />
           )}
           {tab === "security" && <SecurityTab onChangePassword={onChangePassword} />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* ReferralsTab - NEW                                                 */
+/* ------------------------------------------------------------------ */
+
+function ReferralsTab({
+  claims,
+  onApprove,
+  onReject,
+}: {
+  claims: ReferralClaim[];
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const pending = claims.filter(c => c.status === "pending");
+  const approved = claims.filter(c => c.status === "approved");
+  const rejected = claims.filter(c => c.status === "rejected");
+  const totalPaid = approved.reduce((sum, c) => sum + safeNum(c.amount), 0);
+  const totalPending = pending.reduce((sum, c) => sum + safeNum(c.amount), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className={card + " !p-3"}><div className="text-xs text-slate-500">Pending</div><div className="text-xl font-black text-amber-600">{pending.length}</div></div>
+        <div className={card + " !p-3"}><div className="text-xs text-slate-500">Approved</div><div className="text-xl font-black text-emerald-600">{approved.length}</div></div>
+        <div className={card + " !p-3"}><div className="text-xs text-slate-500">Total Paid</div><div className="text-xl font-black">₹{totalPaid}</div></div>
+        <div className={card + " !p-3"}><div className="text-xs text-slate-500">Pending Amount</div><div className="text-xl font-black text-amber-600">₹{totalPending}</div></div>
+      </div>
+
+      <div className={card}>
+        <div className="font-bold text-slate-900 flex items-center gap-2">
+          <Gift className="h-4 w-4 text-[#e53935]" /> Pending referral claims · {pending.length}
+        </div>
+        <p className={sub}>Verify the user's referral activity before approving the claim.</p>
+        <div className="mt-3 space-y-2.5">
+          {pending.length === 0 ? (
+            <p className="text-sm text-slate-500">No pending referral claims.</p>
+          ) : (
+            pending.map((claim) => (
+              <div key={claim.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <p className="text-[11px] uppercase text-slate-500">User</p>
+                    <p className="font-bold text-slate-900">{claim.userName}</p>
+                    <p className="font-mono text-xs text-[#e53935]">{claim.userId}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase text-slate-500">Claim Amount</p>
+                    <p className="font-black text-2xl text-emerald-600">₹{claim.amount}</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-slate-500">Requested {safeTimeAgo(claim.createdAt)}</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onReject(claim.id)}
+                      className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-600 hover:bg-red-50"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={() => onApprove(claim.id)}
+                      className="rounded-full bg-[#e53935] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#c62828]"
+                    >
+                      Approve & Credit ₹{claim.amount}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      <div className={card}>
+        <h3 className="font-bold text-slate-900">All claims history</h3>
+        <div className="mt-3 space-y-2 max-h-[400px] overflow-y-auto text-sm">
+          {claims.length === 0 ? (
+            <p className="text-slate-500">No claims yet.</p>
+          ) : (
+            claims.map(claim => (
+              <div key={claim.id} className="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold truncate">{claim.userName}</div>
+                  <div className="text-xs text-slate-500 truncate">{claim.userId} · {safeTimeAgo(claim.createdAt)}</div>
+                </div>
+                <div className="text-right ml-2 shrink-0">
+                  <div className="font-black">₹{claim.amount}</div>
+                  <StatusBadge label={claim.status} status={claim.status} />
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -395,6 +512,13 @@ function UsersTab({
                   <div className="font-mono font-bold text-[#e53935]">{user.userId}</div>
                   <div className="font-semibold">{user.name || "Unknown"} · {user.phone || "—"}</div>
                   <div className="text-slate-600">Balance: {safeCredits(user?.wallet)} · Joined {safeTimeAgo(user?.createdAt)}</div>
+                  {user.referralCode && (
+                    <div className="text-xs text-slate-500 mt-1">
+                      Code: <span className="font-mono text-[#e53935]">{user.referralCode}</span>
+                      {user.referredBy && <> · Referred by: <span className="font-mono">{user.referredBy}</span></>}
+                      {user.referralCount > 0 && <> · {user.referralCount} referrals</>}
+                    </div>
+                  )}
                 </div>
               );
             })

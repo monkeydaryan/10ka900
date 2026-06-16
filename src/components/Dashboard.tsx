@@ -1,6 +1,4 @@
-// MARKET 90XX - Dashboard.tsx - 91 Club Mobile UI Reskin
-// Game logic is 100% untouched - only UI/UX changed
-// Drop-in replacement for src/components/Dashboard.tsx
+// MARKET 90XX - Dashboard.tsx - 91 Club Mobile UI Reskin with Referral System
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -9,6 +7,7 @@ import {
   Bot,
   CheckCircle2,
   Gauge,
+  Gift,
   Headset,
   ImagePlus,
   Landmark,
@@ -16,12 +15,15 @@ import {
   Paperclip,
   QrCode,
   Send,
+  Share2,
   ShieldCheck,
   TimerReset,
   Trophy,
   UserCircle2,
+  Users,
   WalletCards,
   XCircle,
+  Copy,
 } from "lucide-react";
 
 import {
@@ -29,7 +31,9 @@ import {
   DOUBLE_MULTIPLIER,
   MAX_DOUBLE_BET,
   MIN_DEPOSIT,
+  MIN_REFERRAL_CLAIM,
   MIN_WITHDRAW,
+  REFERRAL_BONUS,
   SPLIT_MULTIPLIER,
   formatCredits,
   getMarketStatusClasses,
@@ -45,6 +49,7 @@ import type {
   DepositRequest,
   Market,
   MarketId,
+  ReferralClaim,
   SplitSide,
   SupportTicket,
   UserProfile,
@@ -54,33 +59,24 @@ import type {
 import { Field, InfoStrip, PasswordChangeForm, SectionCard, StatusBadge, inputClasses } from "@/components/ui";
 
 
-// ─── Safe timeAgo wrapper ─────────────────────────────────────────────────────
-
 function safeTimeAgo(date: Date | string | number | undefined | null): string {
   if (!date) return "Just now";
   try {
-    if (typeof date === "number") {
-      return timeAgo(new Date(date).toISOString());
-    }
-    if (typeof date === "string") {
-      return timeAgo(date);
-    }
+    if (typeof date === "number") return timeAgo(new Date(date).toISOString());
+    if (typeof date === "string") return timeAgo(date);
     return timeAgo(date.toISOString());
   } catch (e) {
-    console.warn("Invalid date in timeAgo:", date, e);
     return "Just now";
   }
 }
 
-export type UserTab = MarketId | "bets" | "wallet" | "support" | "profile";
+export type UserTab = MarketId | "bets" | "wallet" | "support" | "profile" | "referral";
 
-/** Safely parse a number input, returning fallback for invalid values. */
 function safeNumber(value: string | number, fallback = 0): number {
   const n = typeof value === "string" ? Number(value) : value;
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
-/** Live ticking clock, updates every second. */
 function useNow() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
@@ -105,6 +101,8 @@ export function Dashboard({
   deposits,
   withdrawals,
   tickets,
+  referralClaims,
+  allUsers,
   activeTab,
   onTabChange,
   onLogout,
@@ -112,6 +110,7 @@ export function Dashboard({
   onDeposit,
   onWithdraw,
   onTicket,
+  onClaimReferral,
   onChangePassword,
 }: {
   user: UserProfile;
@@ -120,6 +119,8 @@ export function Dashboard({
   deposits: DepositRequest[];
   withdrawals: WithdrawRequest[];
   tickets: SupportTicket[];
+  referralClaims: ReferralClaim[];
+  allUsers: UserProfile[];
   activeTab: UserTab;
   onTabChange: (tab: UserTab) => void;
   onLogout: () => void;
@@ -127,43 +128,32 @@ export function Dashboard({
   onDeposit: (transactionId: string, amount: number) => string | null;
   onWithdraw: (form: WithdrawForm) => string | null;
   onTicket: (topic: string, message: string, transactionId?: string, screenshot?: string, screenshotName?: string) => void;
+  onClaimReferral: () => string | null;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<string | null>;
 }) {
   const activeMarket = markets.find((market) => market?.id === activeTab);
 
-  // Memoize pending stats
-  const { pendingBetsCount, pendingStake } = useMemo(() => {
-    const pending = bets.filter((bet) => bet?.status === "pending");
-    return {
-      pendingBetsCount: pending.length,
-      pendingStake: pending.reduce((sum, bet) => {
-        const stake = Number(bet?.stake);
-        return sum + (Number.isFinite(stake) ? stake : 0);
-      }, 0),
-    };
-  }, [bets]);
-
-  // Map old tabs to new bottom nav views
   const currentView = 
     activeMarket ? "home" :
     activeTab === "bets" ? "history" :
     activeTab === "wallet" ? "wallet" :
     activeTab === "support" ? "support" :
+    activeTab === "referral" ? "referral" :
     activeTab === "profile" ? "account" : "home";
 
-  const goView = (v: "home"|"history"|"wallet"|"support"|"account") => {
+  const goView = (v: "home"|"history"|"wallet"|"support"|"account"|"referral") => {
     if (v === "home") onTabChange(markets[0]?.id || "hsi");
     if (v === "history") onTabChange("bets");
     if (v === "wallet") onTabChange("wallet");
     if (v === "support") onTabChange("support");
     if (v === "account") onTabChange("profile");
+    if (v === "referral") onTabChange("referral");
   };
 
   return (
     <div className="min-h-screen bg-[#e8e8e8] flex justify-center text-slate-900">
       <div className="w-full max-w-[420px] bg-[#f5f5f7] min-h-screen relative pb-[76px] shadow-2xl">
         
-        {/* TOP BAR - 91 Club style */}
         <header className="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
           <div className="font-black text-[18px] tracking-wide text-slate-900">
             MARKET <span className="text-[#e53935]">90XX</span>
@@ -182,7 +172,6 @@ export function Dashboard({
           </div>
         </header>
 
-        {/* MARKET TABS - Scrollable bar with all markets */}
         {currentView === "home" && markets.length > 0 && (
           <div className="sticky top-[64px] z-25 bg-white border-b border-slate-200 overflow-x-auto">
             <div className="flex gap-2 px-3.5 py-2 whitespace-nowrap">
@@ -206,7 +195,6 @@ export function Dashboard({
           </div>
         )}
 
-        {/* MAIN CONTENT */}
         <main className="px-3.5 py-3.5">
           {activeMarket ? (
             <div className="bg-white rounded-[18px] p-3 shadow-sm border border-slate-200">
@@ -216,6 +204,13 @@ export function Dashboard({
             <BetsPanel bets={bets} markets={markets} />
           ) : activeTab === "wallet" ? (
             <WalletPanel user={user} deposits={deposits} withdrawals={withdrawals} onDeposit={onDeposit} onWithdraw={onWithdraw} />
+          ) : activeTab === "referral" ? (
+            <ReferralPanel 
+              user={user} 
+              allUsers={allUsers}
+              referralClaims={referralClaims}
+              onClaimReferral={onClaimReferral}
+            />
           ) : activeTab === "profile" ? (
             <ProfilePanel 
               user={user} 
@@ -227,17 +222,18 @@ export function Dashboard({
               goWallet={() => goView("wallet")}
               goHistory={() => goView("history")}
               goSupport={() => goView("support")}
+              goReferral={() => goView("referral")}
             />
           ) : (
             <SupportPanel tickets={tickets} onTicket={onTicket} />
           )}
         </main>
 
-        {/* BOTTOM NAV - 4 equal tabs, clean - 91 Club style */}
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white border-t border-slate-200 grid grid-cols-4 px-1 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] z-40">
+        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white border-t border-slate-200 grid grid-cols-5 px-1 pt-2 pb-[calc(8px+env(safe-area-inset-bottom))] z-40">
           <BottomBtn active={currentView==="home"} onClick={()=>goView("home")} icon="🏠" label="Home" />
           <BottomBtn active={currentView==="history"} onClick={()=>goView("history")} icon="📋" label="History" />
           <BottomBtn active={currentView==="wallet"} onClick={()=>goView("wallet")} icon="💰" label="Wallet" />
+          <BottomBtn active={currentView==="referral"} onClick={()=>goView("referral")} icon="🎁" label="Refer" />
           <BottomBtn active={currentView==="account" || currentView==="support"} onClick={()=>goView("account")} icon="👤" label="Account" />
         </nav>
       </div>
@@ -249,17 +245,261 @@ function BottomBtn({ active, onClick, icon, label }: { active: boolean; onClick:
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-0.5 py-1 text-[11px] font-semibold transition ${active ? "text-[#e53935]" : "text-slate-500"}`}
+      className={`flex flex-col items-center gap-0.5 py-1 text-[10px] font-semibold transition ${active ? "text-[#e53935]" : "text-slate-500"}`}
     >
-      <span className="text-[20px]">{icon}</span>
+      <span className="text-[18px]">{icon}</span>
       {label}
     </button>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* REFERRAL PANEL - NEW                                               */
+/* ------------------------------------------------------------------ */
+
+function ReferralPanel({
+  user,
+  allUsers,
+  referralClaims,
+  onClaimReferral,
+}: {
+  user: UserProfile;
+  allUsers: UserProfile[];
+  referralClaims: ReferralClaim[];
+  onClaimReferral: () => string | null;
+}) {
+  const [copied, setCopied] = useState(false);
+  const [claimMsg, setClaimMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  const referralCode = user?.referralCode || "LOADING";
+  const referralLink = `${window.location.origin}?ref=${referralCode}`;
+  const pendingEarnings = user?.pendingReferralEarnings || 0;
+  const totalEarnings = user?.referralEarnings || 0;
+  const referralCount = user?.referralCount || 0;
+
+  // Find users referred by current user
+  const myReferrals = useMemo(() => {
+    return allUsers.filter(u => u.referredBy === user.userId);
+  }, [allUsers, user.userId]);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleWhatsAppShare = () => {
+    const message = `🎯 Hey! Join me on MARKET 90XX - the best decimal close gaming platform!\n\n💰 Win up to 90x your bet\n🎁 Use my referral code: *${referralCode}*\n\n👉 Join here: ${referralLink}\n\nLet's win together! 🚀`;
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, "_blank");
+  };
+
+  const handleNativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "MARKET 90XX",
+          text: `Join me on MARKET 90XX! Use my referral code: ${referralCode}`,
+          url: referralLink,
+        });
+      } catch (e) {
+        // User cancelled
+      }
+    } else {
+      handleWhatsAppShare();
+    }
+  };
+
+  const handleClaim = () => {
+    const error = onClaimReferral();
+    if (error) {
+      setClaimMsg({ kind: "err", text: error });
+    } else {
+      setClaimMsg({ kind: "ok", text: `Claim of ₹${pendingEarnings} submitted! Admin will approve soon.` });
+    }
+    setTimeout(() => setClaimMsg(null), 5000);
+  };
+
+  const hasPendingClaim = referralClaims.some(c => c.status === "pending");
+
+  return (
+    <div className="space-y-3 -mx-3.5 -mt-3.5">
+      {/* Red header */}
+      <div className="bg-gradient-to-br from-[#ff5a4a] to-[#e53935] text-white px-4 pt-5 pb-8">
+        <div className="text-center">
+          <Gift className="h-12 w-12 mx-auto mb-2" />
+          <h1 className="text-[24px] font-black">Earn ₹50 per friend!</h1>
+          <p className="text-white/90 text-sm mt-1">Share your code and earn instantly</p>
+        </div>
+      </div>
+
+      <div className="px-3.5 space-y-3 -mt-4 relative">
+        {/* Earnings Stats */}
+        <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div className="text-[11px] text-slate-500 uppercase">Friends Joined</div>
+              <div className="text-[24px] font-black text-slate-900">{referralCount}</div>
+            </div>
+            <div className="border-l border-r border-slate-200">
+              <div className="text-[11px] text-slate-500 uppercase">Pending</div>
+              <div className="text-[24px] font-black text-amber-600">₹{pendingEarnings}</div>
+            </div>
+            <div>
+              <div className="text-[11px] text-slate-500 uppercase">Earned</div>
+              <div className="text-[24px] font-black text-emerald-600">₹{totalEarnings}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Your Referral Code */}
+        <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
+          <div className="text-xs uppercase tracking-widest text-slate-500 font-bold mb-2">Your Referral Code</div>
+          <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-dashed border-[#e53935] rounded-2xl p-4 text-center">
+            <div className="font-mono font-black text-[28px] text-[#e53935] tracking-widest">
+              {referralCode}
+            </div>
+            <button
+              onClick={() => handleCopy(referralCode)}
+              className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-slate-600 hover:text-[#e53935]"
+            >
+              <Copy className="h-3 w-3" />
+              {copied ? "Copied!" : "Tap to copy"}
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            <button
+              onClick={handleWhatsAppShare}
+              className="w-full flex items-center justify-center gap-2 bg-[#25D366] text-white rounded-xl px-4 py-3.5 font-black text-sm hover:bg-[#1ea951] transition"
+            >
+              <Share2 className="h-4 w-4" />
+              Share on WhatsApp
+            </button>
+            <button
+              onClick={handleNativeShare}
+              className="w-full flex items-center justify-center gap-2 bg-slate-100 text-slate-800 rounded-xl px-4 py-3 font-bold text-sm hover:bg-slate-200 transition"
+            >
+              <Share2 className="h-4 w-4" />
+              More share options
+            </button>
+            <button
+              onClick={() => handleCopy(referralLink)}
+              className="w-full flex items-center justify-center gap-2 border border-slate-300 rounded-xl px-4 py-3 font-semibold text-sm text-slate-700"
+            >
+              <Copy className="h-4 w-4" />
+              {copied ? "Link Copied!" : "Copy referral link"}
+            </button>
+          </div>
+        </div>
+
+        {/* Claim Section */}
+        <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
+          <div className="flex items-center gap-2 mb-2">
+            <WalletCards className="h-5 w-5 text-[#e53935]" />
+            <h3 className="font-black text-slate-900">Claim Earnings</h3>
+          </div>
+          <p className="text-sm text-slate-600">
+            Minimum claim: <b>₹{MIN_REFERRAL_CLAIM}</b>. Admin will verify and credit to your wallet.
+          </p>
+          
+          {claimMsg && (
+            <p className={`mt-3 rounded-xl px-3 py-2 text-sm ${
+              claimMsg.kind === "ok" 
+                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                : "bg-red-50 text-red-800 border border-red-200"
+            }`}>
+              {claimMsg.text}
+            </p>
+          )}
+
+          <button
+            onClick={handleClaim}
+            disabled={pendingEarnings < MIN_REFERRAL_CLAIM || hasPendingClaim}
+            className="mt-3 w-full bg-[#e53935] text-white rounded-xl px-4 py-3.5 font-black text-sm disabled:bg-slate-300 disabled:text-slate-500"
+          >
+            {hasPendingClaim 
+              ? "Claim pending approval..." 
+              : pendingEarnings < MIN_REFERRAL_CLAIM
+                ? `Need ₹${MIN_REFERRAL_CLAIM - pendingEarnings} more to claim`
+                : `Claim ₹${pendingEarnings} now`}
+          </button>
+        </div>
+
+        {/* How it works */}
+        <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
+          <h3 className="font-black text-slate-900 mb-3">How it works</h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-red-100 text-[#e53935] flex items-center justify-center font-black text-sm">1</div>
+              <div className="flex-1 pt-1">Share your code with friends</div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-red-100 text-[#e53935] flex items-center justify-center font-black text-sm">2</div>
+              <div className="flex-1 pt-1">They sign up using your code</div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-red-100 text-[#e53935] flex items-center justify-center font-black text-sm">3</div>
+              <div className="flex-1 pt-1">You earn <b className="text-[#e53935]">₹{REFERRAL_BONUS}</b> instantly</div>
+            </div>
+            <div className="flex gap-3">
+              <div className="w-7 h-7 rounded-full bg-red-100 text-[#e53935] flex items-center justify-center font-black text-sm">4</div>
+              <div className="flex-1 pt-1">Claim when you reach ₹{MIN_REFERRAL_CLAIM}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* My Referrals List */}
+        {myReferrals.length > 0 && (
+          <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Users className="h-5 w-5 text-[#e53935]" />
+              <h3 className="font-black text-slate-900">My Referrals ({myReferrals.length})</h3>
+            </div>
+            <div className="space-y-2">
+              {myReferrals.map(referredUser => (
+                <div key={referredUser.userId} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <div>
+                    <div className="font-bold text-slate-900 text-sm">{referredUser.name}</div>
+                    <div className="text-xs text-slate-500">Joined {safeTimeAgo(referredUser.createdAt)}</div>
+                  </div>
+                  <div className="text-[#e53935] font-black text-sm">+₹{REFERRAL_BONUS}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Claims History */}
+        {referralClaims.length > 0 && (
+          <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
+            <h3 className="font-black text-slate-900 mb-3">Claim History</h3>
+            <div className="space-y-2">
+              {referralClaims.map(claim => (
+                <div key={claim.id} className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-xl p-3">
+                  <div>
+                    <div className="font-bold text-slate-900 text-sm">₹{claim.amount}</div>
+                    <div className="text-xs text-slate-500">{safeTimeAgo(claim.createdAt)}</div>
+                  </div>
+                  <div className={`text-xs font-bold uppercase px-2 py-1 rounded-full ${
+                    claim.status === "approved" ? "bg-emerald-100 text-emerald-700" :
+                    claim.status === "rejected" ? "bg-red-100 text-red-700" :
+                    "bg-amber-100 text-amber-700"
+                  }`}>
+                    {claim.status}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
-/* Market + betting - UNCHANGED LOGIC, only wrapped in mobile cards    */
+/* Market + betting                                                    */
 /* ------------------------------------------------------------------ */
 
 function MarketPanel({
@@ -291,31 +531,10 @@ function MarketPanel({
   const bettingOpen = isBettingOpen(market, now);
   const countdown = timeUntilCutoff(market, now);
 
-  const lastPrice = Number(market?.lastPrice) || 0;
-  const change = Number(market?.change) || 0;
-  const resultDecimal = market?.resultDecimal || "--";
-
   if (!market) {
-    return (
-      <div className="p-4 text-red-500">Error: Market data not available</div>
-    );
+    return <div className="p-4 text-red-500">Error: Market data not available</div>;
   }
 
-  const formattedLastPrice = (() => {
-    if (!Number.isFinite(lastPrice) || lastPrice <= 0) return "N/A";
-    try {
-      return lastPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    } catch {
-      return lastPrice.toFixed(2);
-    }
-  })();
-
-  const formattedChange = (() => {
-    if (!Number.isFinite(change)) return "N/A";
-    return `${change > 0 ? "+" : ""}${change.toFixed(2)}%`;
-  })();
-
-  // Mobile-optimized market panel
   return (
     <div className="space-y-4">
       <div>
@@ -368,7 +587,6 @@ function MarketPanel({
         </div>
       </div>
 
-      {/* MY BETS IN THIS MARKET SECTION */}
       <div>
         <p className="mb-3 text-[11px] uppercase tracking-widest text-slate-500 font-bold">My bets in {market?.name}</p>
         <div className="space-y-2">
@@ -384,16 +602,6 @@ function MarketPanel({
           )}
         </div>
       </div>
-    </div>
-  );
-}
-
-function TickerMetric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" | "accent" }) {
-  const toneClass = tone === "good" ? "text-emerald-600" : tone === "bad" ? "text-red-600" : tone === "accent" ? "text-[#e53935]" : "text-slate-900";
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-      <p className="text-[10px] uppercase tracking-widest text-slate-500">{label}</p>
-      <p className={`mt-1 font-mono text-lg font-black ${toneClass}`}>{value}</p>
     </div>
   );
 }
@@ -620,35 +828,22 @@ function SlipMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Bets ledger - with market breakdown                                */
-/* ------------------------------------------------------------------ */
-
 function BetsPanel({ bets, markets }: { bets: Bet[]; markets: Market[] }) {
   const [expandedMarket, setExpandedMarket] = useState<string | null>(null);
 
   const analytics = useMemo(() => {
     const won = bets.filter((bet) => bet?.status === "won").length;
     const lost = bets.filter((bet) => bet?.status === "lost").length;
-    const staked = bets.reduce((sum, bet) => {
-      const stake = Number(bet?.stake);
-      return sum + (Number.isFinite(stake) ? stake : 0);
-    }, 0);
-    const paid = bets.reduce((sum, bet) => {
-      const payout = Number(bet?.payout);
-      return sum + (Number.isFinite(payout) ? payout : 0);
-    }, 0);
+    const staked = bets.reduce((sum, bet) => sum + (Number(bet?.stake) || 0), 0);
+    const paid = bets.reduce((sum, bet) => sum + (Number(bet?.payout) || 0), 0);
     return { won, lost, staked, paid };
   }, [bets]);
 
-  // Group bets by market
   const betsByMarket = useMemo(() => {
     const grouped: { [key: string]: Bet[] } = {};
     bets.forEach(bet => {
       if (bet?.marketId) {
-        if (!grouped[bet.marketId]) {
-          grouped[bet.marketId] = [];
-        }
+        if (!grouped[bet.marketId]) grouped[bet.marketId] = [];
         grouped[bet.marketId].push(bet);
       }
     });
@@ -667,7 +862,6 @@ function BetsPanel({ bets, markets }: { bets: Bet[]; markets: Market[] }) {
         </div>
       </div>
 
-      {/* Bets grouped by market */}
       <div className="space-y-2">
         {bets.length === 0 ? (
           <p className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">No bets yet.</p>
@@ -675,10 +869,8 @@ function BetsPanel({ bets, markets }: { bets: Bet[]; markets: Market[] }) {
           markets.map(market => {
             const marketBets = betsByMarket[market?.id] || [];
             if (marketBets.length === 0) return null;
-
             return (
               <div key={market?.id} className="bg-white rounded-[18px] border border-slate-200 shadow-sm overflow-hidden">
-                {/* Market header */}
                 <button
                   onClick={() => setExpandedMarket(expandedMarket === market?.id ? null : market?.id)}
                   className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition border-b border-slate-200"
@@ -687,14 +879,8 @@ function BetsPanel({ bets, markets }: { bets: Bet[]; markets: Market[] }) {
                     <div className="font-bold text-slate-900">{market?.name || "Unknown Market"}</div>
                     <div className="text-xs text-slate-500">{marketBets.length} bet{marketBets.length !== 1 ? 's' : ''}</div>
                   </div>
-                  <div className="text-2xl transition-transform" style={{
-                    transform: expandedMarket === market?.id ? 'rotate(180deg)' : 'rotate(0deg)'
-                  }}>
-                    ▼
-                  </div>
+                  <div className="text-2xl transition-transform" style={{ transform: expandedMarket === market?.id ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</div>
                 </button>
-
-                {/* Bets list - expanded */}
                 {expandedMarket === market?.id && (
                   <div className="p-4 space-y-2 bg-slate-50">
                     {marketBets.map((bet) => {
@@ -714,19 +900,13 @@ function BetsPanel({ bets, markets }: { bets: Bet[]; markets: Market[] }) {
 
 export function BetRow({ bet, showUser = false }: { bet: Bet; showUser?: boolean }) {
   const statusIcon =
-    bet.status === "won" ? (
-      <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-    ) : bet.status === "lost" ? (
-      <XCircle className="h-5 w-5 shrink-0 text-red-500" />
-    ) : bet.status === "refunded" ? (
-      <XCircle className="h-5 w-5 shrink-0 text-slate-400" />
-    ) : (
-      <TimerReset className="h-5 w-5 shrink-0 text-amber-500" />
-    );
+    bet.status === "won" ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
+    : bet.status === "lost" ? <XCircle className="h-5 w-5 shrink-0 text-red-500" />
+    : bet.status === "refunded" ? <XCircle className="h-5 w-5 shrink-0 text-slate-400" />
+    : <TimerReset className="h-5 w-5 shrink-0 text-amber-500" />;
 
   const modeLabel = bet.mode === "double" ? "Double" : (bet.splitSide ?? "Split");
   const safeStake = Number(bet?.stake) || 0;
-  const safePotential = Number(bet?.potentialReturn) || 0;
   const safePlacedAt = bet?.placedAt || Date.now();
 
   return (
@@ -738,9 +918,7 @@ export function BetRow({ bet, showUser = false }: { bet: Bet; showUser?: boolean
             {bet.marketName || "Unknown Market"}
             {showUser && <span className="ml-2 font-mono text-xs font-normal text-[#e53935]">{bet.userId}</span>}
           </p>
-          <p className="truncate text-sm text-slate-500">
-            {modeLabel} · {bet.selection} · {safeTimeAgo(safePlacedAt)}
-          </p>
+          <p className="truncate text-sm text-slate-500">{modeLabel} · {bet.selection} · {safeTimeAgo(safePlacedAt)}</p>
         </div>
         <div className="text-right text-sm">
           <div className="font-mono text-slate-700">₹{safeStake}</div>
@@ -750,10 +928,6 @@ export function BetRow({ bet, showUser = false }: { bet: Bet; showUser?: boolean
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Wallet - unchanged logic, mobile skin                              */
-/* ------------------------------------------------------------------ */
 
 function WalletPanel({
   user,
@@ -771,7 +945,6 @@ function WalletPanel({
   const [txId, setTxId] = useState("");
   const [amount, setAmount] = useState<number>(MIN_DEPOSIT);
   const [depositMsg, setDepositMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
-
   const [wAmount, setWAmount] = useState<number>(MIN_WITHDRAW);
   const [bankName, setBankName] = useState("");
   const [accountHolder, setAccountHolder] = useState("");
@@ -830,7 +1003,6 @@ function WalletPanel({
 
   return (
     <div className="space-y-3">
-      {/* Balance card - 91 Club style */}
       <div className="bg-white rounded-[18px] p-4 border border-slate-200 shadow-sm">
         <div className="text-slate-500 text-sm">Total balance</div>
         <div className="text-[28px] font-black text-slate-900">{formatCredits(Number(user?.wallet) || 0)}</div>
@@ -841,7 +1013,6 @@ function WalletPanel({
         </div>
       </div>
 
-      {/* Deposit */}
       <div className="bg-white rounded-[18px] p-4 border border-slate-200 shadow-sm">
         <h2 className="text-lg font-black">Deposit</h2>
         <div className="mt-3 flex gap-3">
@@ -866,7 +1037,6 @@ function WalletPanel({
         </div>
       </div>
 
-      {/* Withdraw */}
       <div className="bg-white rounded-[18px] p-4 border border-slate-200 shadow-sm">
         <h2 className="text-lg font-black">Withdraw</h2>
         <div className="mt-3 grid gap-2">
@@ -885,10 +1055,6 @@ function WalletPanel({
     </div>
   );
 }
-
-/* ------------------------------------------------------------------ */
-/* Support - unchanged logic                                          */
-/* ------------------------------------------------------------------ */
 
 type ChatMessage = { from: "bot" | "user"; text: string };
 
@@ -1011,10 +1177,6 @@ function SupportPanel({
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* Profile - 91 CLUB STYLE                                            */
-/* ------------------------------------------------------------------ */
-
 function ProfilePanel({
   user,
   bets,
@@ -1025,6 +1187,7 @@ function ProfilePanel({
   goWallet,
   goHistory,
   goSupport,
+  goReferral,
 }: {
   user: UserProfile;
   bets: Bet[];
@@ -1035,6 +1198,7 @@ function ProfilePanel({
   goWallet: () => void;
   goHistory: () => void;
   goSupport: () => void;
+  goReferral: () => void;
 }) {
   const [showSecurity, setShowSecurity] = useState(false);
 
@@ -1048,7 +1212,6 @@ function ProfilePanel({
 
   return (
     <div className="space-y-3 -mx-3.5 -mt-3.5">
-      {/* Red header - 91 Club style */}
       <div className="bg-gradient-to-br from-[#ff5a4a] to-[#e53935] text-white px-4 pt-5 pb-6">
         <div className="flex items-center gap-3">
           <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-[22px] font-black border-2 border-white/30">
@@ -1063,7 +1226,6 @@ function ProfilePanel({
       </div>
 
       <div className="px-3.5 space-y-3 -mt-3 relative">
-        {/* Balance card */}
         <div className="bg-white rounded-[18px] p-4 shadow-sm border border-slate-200">
           <div className="flex items-center justify-between">
             <div>
@@ -1085,14 +1247,25 @@ function ProfilePanel({
               <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-xl">⬆</div>
               Withdraw
             </button>
-            <div className="flex flex-col items-center gap-1 opacity-80">
-              <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-xl">🎖</div>
-              VIP
-            </div>
+            <button onClick={goReferral} className="flex flex-col items-center gap-1">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center text-xl">🎁</div>
+              Refer
+            </button>
           </div>
         </div>
 
-        {/* History cards - 2x2 grid like 91 Club */}
+        {/* Referral promo card */}
+        <button onClick={goReferral} className="w-full bg-gradient-to-r from-[#ff5a4a] to-[#e53935] text-white rounded-[18px] p-4 shadow-sm text-left">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-black text-lg">🎁 Refer & Earn ₹{REFERRAL_BONUS}</div>
+              <div className="text-sm text-white/90 mt-1">Code: <b className="font-mono">{user?.referralCode || "—"}</b></div>
+              <div className="text-xs text-white/80 mt-1">{user?.referralCount || 0} friends joined · ₹{user?.pendingReferralEarnings || 0} pending</div>
+            </div>
+            <div className="text-3xl">→</div>
+          </div>
+        </button>
+
         <div className="grid grid-cols-2 gap-2.5">
           <button onClick={goHistory} className="bg-white rounded-[16px] p-3.5 border border-slate-200 shadow-sm text-left">
             <div className="text-xl">📊</div>
@@ -1119,14 +1292,13 @@ function ProfilePanel({
           </button>
         </div>
 
-        {/* List items - Notification / Gifts */}
         <div className="bg-white rounded-[16px] border border-slate-200 shadow-sm divide-y divide-slate-100">
-          <button onClick={goSupport} className="w-full flex items-center justify-between px-4 py-3.5">
-            <span className="flex items-center gap-3"><span className="text-lg">🔔</span> Notification</span>
+          <button onClick={goReferral} className="w-full flex items-center justify-between px-4 py-3.5">
+            <span className="flex items-center gap-3"><span className="text-lg">🎁</span> Referral Program</span>
             <span className="text-slate-400">›</span>
           </button>
-          <button className="w-full flex items-center justify-between px-4 py-3.5">
-            <span className="flex items-center gap-3"><span className="text-lg">🎁</span> Gifts</span>
+          <button onClick={goSupport} className="w-full flex items-center justify-between px-4 py-3.5">
+            <span className="flex items-center gap-3"><span className="text-lg">🔔</span> Notification</span>
             <span className="text-slate-400">›</span>
           </button>
           <button onClick={()=>setShowSecurity(!showSecurity)} className="w-full flex items-center justify-between px-4 py-3.5">

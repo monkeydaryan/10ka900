@@ -10,8 +10,11 @@ import {
   MIN_DEPOSIT,
   MIN_WITHDRAW,
   OWNER_EMAIL,
+  REFERRAL_BONUS,
+  MIN_REFERRAL_CLAIM,
   SPLIT_MULTIPLIER,
   createId,
+  createReferralCode,
   createSalt,
   createUserId,
   formatCredits,
@@ -29,6 +32,7 @@ import type {
   Market,
   MarketId,
   MarketState,
+  ReferralClaim,
   RequestStatus,
   SplitSide,
   SupportTicket,
@@ -60,6 +64,7 @@ export default function App() {
   const [deposits, setDeposits] = useState<DepositRequest[]>(() => readStorage(K.deposits, []));
   const [withdrawals, setWithdrawals] = useState<WithdrawRequest[]>(() => readStorage(K.withdrawals, []));
   const [tickets, setTickets] = useState<SupportTicket[]>(() => readStorage(K.tickets, []));
+  const [referralClaims, setReferralClaims] = useState<ReferralClaim[]>(() => readStorage(K.referralClaims, []));
   const [markets, setMarkets] = useState<Market[]>(() => {
     const stored = readStorage<Market[]>(K.markets, initialMarkets);
     return Array.isArray(stored) && stored.length > 0 ? stored : initialMarkets;
@@ -67,9 +72,6 @@ export default function App() {
   const [events, setEvents] = useState<ActivityEvent[]>(() => readStorage(K.events, []));
   const [activeTab, setActiveTab] = useState<UserTab>("hsi");
 
-  /* ------------------------------------------------------------ */
-  /* Live sync: cross-tab storage events + polling for admin views */
-  /* ------------------------------------------------------------ */
   useEffect(() => {
     const sync = () => {
       setUsers((prev) => stable(prev, readStorage(K.users, prev)));
@@ -77,9 +79,9 @@ export default function App() {
       setDeposits((prev) => stable(prev, readStorage(K.deposits, prev)));
       setWithdrawals((prev) => stable(prev, readStorage(K.withdrawals, prev)));
       setTickets((prev) => stable(prev, readStorage(K.tickets, prev)));
+      setReferralClaims((prev) => stable(prev, readStorage(K.referralClaims, prev)));
       setMarkets((prev) => {
         const fromStorage = readStorage<Market[]>(K.markets, prev);
-        // Never overwrite with empty/invalid data
         const valid = Array.isArray(fromStorage) && fromStorage.length > 0 ? fromStorage : initialMarkets;
         return stable(prev, valid);
       });
@@ -90,9 +92,8 @@ export default function App() {
     window.addEventListener("firebase-sync", sync);
     window.addEventListener("storage", sync);
 
-    // Preload all data first, then start realtime sync
     void preloadAllData().then(() => {
-      sync(); // Run once after preload completes
+      sync();
     });
 
     const unsubscribe = startFirebaseSync();
@@ -106,9 +107,6 @@ export default function App() {
     };
   }, []);
 
-  /* ------------------------------------------------------------ */
-  /* Ensure markets are never empty                                 */
-  /* ------------------------------------------------------------ */
   useEffect(() => {
     if (!Array.isArray(markets) || markets.length === 0) {
       console.log("⚠️ Markets empty, restoring defaults...");
@@ -117,9 +115,6 @@ export default function App() {
     }
   }, [markets]);
 
-  /* ------------------------------------------------------------ */
-  /* Persistence helpers                                            */
-  /* ------------------------------------------------------------ */
   const persistUsers = (next: UserProfile[]) => {
     setUsers(next);
     writeStorage(K.users, next);
@@ -140,6 +135,10 @@ export default function App() {
     setTickets(next);
     writeStorage(K.tickets, next);
   };
+  const persistReferralClaims = (next: ReferralClaim[]) => {
+    setReferralClaims(next);
+    writeStorage(K.referralClaims, next);
+  };
   const persistMarkets = (next: Market[]) => {
     setMarkets(next);
     writeStorage(K.markets, next);
@@ -157,10 +156,6 @@ export default function App() {
       return next;
     });
   };
-
-  /* ------------------------------------------------------------ */
-  /* Auth — salted hashes, brute-force lockout, no plaintext        */
-  /* ------------------------------------------------------------ */
 
   type GuardEntry = { fails: number; lockedUntil: number };
   const readGuard = (): Record<string, GuardEntry> => readStorage(K.loginGuard, {});
@@ -197,9 +192,23 @@ export default function App() {
     writeGuard(guard);
   };
 
-  const handleRegistered = async (name: string, phone: string, password: string) => {
+  /* ------------------------------------------------------------ */
+  /* Registration with referral support                            */
+  /* ------------------------------------------------------------ */
+  const handleRegistered = async (name: string, phone: string, password: string, referralCode?: string) => {
     const salt = createSalt();
     const passwordHash = await hashPassword(password, salt);
+    const myReferralCode = createReferralCode(name);
+    
+    // Find referrer if code provided
+    let referredBy: string | undefined = undefined;
+    if (referralCode && referralCode.trim()) {
+      const referrer = users.find(u => u.referralCode === referralCode.trim().toUpperCase());
+      if (referrer) {
+        referredBy = referrer.userId;
+      }
+    }
+
     const profile: UserProfile = {
       userId: createUserId(),
       name,
@@ -209,18 +218,45 @@ export default function App() {
       createdAt: new Date().toISOString(),
       salt,
       passwordHash,
+      referralCode: myReferralCode,
+      referredBy,
+      referralEarnings: 0,
+      referralCount: 0,
+      pendingReferralEarnings: 0,
     };
-    persistUsers([...users, profile]);
+
+    let nextUsers = [...users, profile];
+
+    // Credit referrer with pending bonus
+    if (referredBy) {
+      nextUsers = nextUsers.map(u => 
+        u.userId === referredBy 
+          ? { 
+              ...u, 
+              pendingReferralEarnings: (u.pendingReferralEarnings || 0) + REFERRAL_BONUS,
+              referralCount: (u.referralCount || 0) + 1,
+            }
+          : u
+      );
+      const referrer = users.find(u => u.userId === referredBy);
+      logEvent("referral", `Referral: ${name} joined via ${referrer?.name}`, `${referrer?.userId} earned ₹${REFERRAL_BONUS} pending bonus`);
+      notifyOwner(
+        `${BRAND}: New referral signup`,
+        `${name} joined using ${referrer?.name}'s referral code.\n${referrer?.userId} earned ₹${REFERRAL_BONUS} pending bonus.`
+      );
+    }
+
+    persistUsers(nextUsers);
     updateCurrentUser(profile);
     logEvent("registration", `New registration: ${name}`, `${profile.userId} · ${phone} — forwarded to ${OWNER_EMAIL}`);
     notifyOwner(
       `${BRAND}: new registration ${profile.userId}`,
-      `Name: ${name}\nPhone: ${phone}\nUser ID: ${profile.userId}\nRegistered: ${profile.createdAt}`,
+      `Name: ${name}\nPhone: ${phone}\nUser ID: ${profile.userId}\nReferred By: ${referredBy || "None"}\nRegistered: ${profile.createdAt}`,
     );
     void fetch(`${API_BASE}/register.php`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ phone, display_name: name, password }),
+      body: JSON.stringify({ phone, display_name: name, password, referral_code: referralCode }),
     }).catch(() => undefined);
     setActiveTab("hsi");
     setScreen("dashboard");
@@ -263,7 +299,61 @@ export default function App() {
     return null;
   };
 
-  /* Admin auth: default password is set by the server (ChangeMe123!), changeable afterwards. */
+  /* ------------------------------------------------------------ */
+  /* Referral claim                                                 */
+  /* ------------------------------------------------------------ */
+  const claimReferralEarnings = (): string | null => {
+    if (!currentUser) return "You must be logged in.";
+    const pending = currentUser.pendingReferralEarnings || 0;
+    if (pending < MIN_REFERRAL_CLAIM) return `Minimum claim amount is ₹${MIN_REFERRAL_CLAIM}. You have ₹${pending}.`;
+    
+    // Check if there's already a pending claim
+    const hasPendingClaim = referralClaims.some(c => c.userId === currentUser.userId && c.status === "pending");
+    if (hasPendingClaim) return "You already have a pending claim. Wait for admin approval.";
+
+    const claim: ReferralClaim = {
+      id: createId("REF"),
+      userId: currentUser.userId,
+      userName: currentUser.name,
+      amount: pending,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+    persistReferralClaims([claim, ...referralClaims]);
+    logEvent("referral", `Referral claim: ${currentUser.name}`, `${currentUser.userId} claimed ₹${pending} — awaiting admin approval`);
+    return null;
+  };
+
+  const approveReferralClaim = (id: string) => {
+    const claim = referralClaims.find(c => c.id === id);
+    if (!claim || claim.status !== "pending") return;
+    
+    const nextUsers = users.map(u =>
+      u.userId === claim.userId
+        ? { 
+            ...u, 
+            wallet: u.wallet + claim.amount,
+            pendingReferralEarnings: 0,
+            referralEarnings: (u.referralEarnings || 0) + claim.amount,
+          }
+        : u
+    );
+    persistUsers(nextUsers);
+    persistReferralClaims(referralClaims.map(c => c.id === id ? { ...c, status: "approved" as RequestStatus } : c));
+    if (currentUser?.userId === claim.userId) {
+      const updated = nextUsers.find(u => u.userId === claim.userId);
+      if (updated) updateCurrentUser(updated);
+    }
+    logEvent("referral", `Referral claim approved: ${claim.userName}`, `${claim.userId} received ₹${claim.amount} bonus credits`);
+  };
+
+  const rejectReferralClaim = (id: string) => {
+    const claim = referralClaims.find(c => c.id === id);
+    if (!claim || claim.status !== "pending") return;
+    persistReferralClaims(referralClaims.map(c => c.id === id ? { ...c, status: "rejected" as RequestStatus } : c));
+    logEvent("referral", `Referral claim rejected: ${claim.userName}`, `${claim.userId} claim of ₹${claim.amount} rejected by admin`);
+  };
+
   type AdminAuth = { salt: string; hash: string };
 
   const getAdminAuth = async (): Promise<AdminAuth> => {
@@ -322,9 +412,6 @@ export default function App() {
     setScreen("landing");
   };
 
-  /* ------------------------------------------------------------ */
-  /* Betting (no daily limit)                                       */
-  /* ------------------------------------------------------------ */
   const placeBet = (market: Market, mode: BetMode, selection: string, stake: number, splitSide?: SplitSide): string | null => {
     if (!currentUser) return "You must be logged in.";
     if (!isBettingOpen(market, new Date()))
@@ -361,9 +448,6 @@ export default function App() {
     return null;
   };
 
-  /* ------------------------------------------------------------ */
-  /* Deposits                                                       */
-  /* ------------------------------------------------------------ */
   const createDeposit = (transactionId: string, amount: number): string | null => {
     if (!currentUser) return "You must be logged in.";
     const cleanTx = transactionId.trim().toUpperCase();
@@ -418,9 +502,6 @@ export default function App() {
     logEvent("deposit", `Deposit rejected: ${request.userName}`, `${request.userId} · TX ${request.transactionId} could not be verified`);
   };
 
-  /* ------------------------------------------------------------ */
-  /* Withdrawals (hold immediately, refund on reject)               */
-  /* ------------------------------------------------------------ */
   const requestWithdraw = (form: WithdrawForm): string | null => {
     if (!currentUser) return "You must be logged in.";
     if (!form.bankName.trim() || !form.accountHolder.trim()) return "Bank name and account holder name are required.";
@@ -471,9 +552,6 @@ export default function App() {
     logEvent("withdraw", `Withdrawal rejected: ${request.userName}`, `${formatCredits(request.amount)} hold refunded to ${request.userId}`);
   };
 
-  /* ------------------------------------------------------------ */
-  /* Support tickets                                                */
-  /* ------------------------------------------------------------ */
   const createTicket = (topic: string, message: string, transactionId?: string, screenshot?: string, screenshotName?: string) => {
     if (!currentUser) return;
     const ticket: SupportTicket = {
@@ -499,9 +577,6 @@ export default function App() {
     logEvent("support", `Ticket resolved: ${ticket.userName}`, `${ticket.userId} · ${ticket.topic}`);
   };
 
-  /* ------------------------------------------------------------ */
-  /* Settlement                                                     */
-  /* ------------------------------------------------------------ */
   const refundPendingBetsForMarket = (marketId: MarketId, reason: string) => {
     const refunds = new Map<string, number>();
     const nextBets = bets.map((bet) => {
@@ -606,9 +681,6 @@ export default function App() {
     logEvent("bet", `Market settled: ${marketName}`, `Winning decimals .${normalized} — ${winnings.size} winning user(s) paid instantly`);
   };
 
-  /* ------------------------------------------------------------ */
-  /* Screens                                                        */
-  /* ------------------------------------------------------------ */
   if (screen === "register") {
     return (
       <RegisterScreen
@@ -640,6 +712,7 @@ export default function App() {
         deposits={deposits}
         withdrawals={withdrawals}
         tickets={tickets}
+        referralClaims={referralClaims}
         events={events}
         markets={markets}
         onBack={() => setScreen("landing")}
@@ -648,6 +721,8 @@ export default function App() {
         onApproveWithdraw={approveWithdraw}
         onRejectWithdraw={rejectWithdraw}
         onResolveTicket={resolveTicket}
+        onApproveReferralClaim={approveReferralClaim}
+        onRejectReferralClaim={rejectReferralClaim}
         onSettleMarket={settleMarket}
         onCloseMarket={closeMarket}
         onOpenMarket={openMarket}
@@ -666,6 +741,8 @@ export default function App() {
         deposits={deposits.filter((deposit) => deposit.userId === currentUser.userId)}
         withdrawals={withdrawals.filter((withdrawal) => withdrawal.userId === currentUser.userId)}
         tickets={tickets.filter((ticket) => ticket.userId === currentUser.userId)}
+        referralClaims={referralClaims.filter((claim) => claim.userId === currentUser.userId)}
+        allUsers={users}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onLogout={logout}
@@ -673,6 +750,7 @@ export default function App() {
         onDeposit={createDeposit}
         onWithdraw={requestWithdraw}
         onTicket={createTicket}
+        onClaimReferral={claimReferralEarnings}
         onChangePassword={changeUserPassword}
       />
     );
