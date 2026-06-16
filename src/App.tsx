@@ -114,6 +114,42 @@ export default function App() {
       writeStorage(K.markets, initialMarkets);
     }
   }, [markets]);
+  /* ------------------------------------------------------------ */
+/* AUTO-FIX: Generate referral codes for existing users          */
+/* ------------------------------------------------------------ */
+useEffect(() => {
+  if (!users || users.length === 0) return;
+  
+  const needsUpdate = users.some(u => !u.referralCode);
+  if (!needsUpdate) return;
+
+  console.log("🔧 Adding referral codes to existing users...");
+
+  const updatedUsers = users.map(u => {
+    if (!u.referralCode) {
+      return {
+        ...u,
+        referralCode: createReferralCode(u.name || "USER"),
+        referralEarnings: u.referralEarnings || 0,
+        referralCount: u.referralCount || 0,
+        pendingReferralEarnings: u.pendingReferralEarnings || 0,
+      };
+    }
+    return u;
+  });
+
+  persistUsers(updatedUsers);
+  
+  // Also update current user if they need a code
+  if (currentUser && !currentUser.referralCode) {
+    const updated = updatedUsers.find(u => u.userId === currentUser.userId);
+    if (updated) {
+      updateCurrentUser(updated);
+      console.log(`✅ Generated referral code for ${updated.name}: ${updated.referralCode}`);
+    }
+  }
+}, [users.length]);
+
 
   const persistUsers = (next: UserProfile[]) => {
     setUsers(next);
